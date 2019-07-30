@@ -43,10 +43,22 @@ class FeedManager
   end
 
   def push_to_list(list, status)
-    if status.reply? && status.in_reply_to_account_id != status.account_id
+    # if this is a reply and the list is non-exclusive, use normal lists rules
+    if status.reply? && status.in_reply_to_account_id != status.account_id && !list.is_exclusive
+      # if the account being replied to is not the account that owns the list
       should_filter = status.in_reply_to_account_id != list.account_id
+      # if the account being replied to is not on this list
       should_filter &&= !ListAccount.where(list_id: list.id, account_id: status.in_reply_to_account_id).exists?
+      #if the account being replied to is not the account tat owns this list AND the account being replied to is not on this list, then don't render it on the list
       return false if should_filter
+    end
+    # if this is a reply and the list is exclusive
+    if status.reply? && !status.in_reply_to_account_id.nil? && list.is_exclusive
+      receiver_id = list.account_id
+      should_filter   = !Follow.where(account_id: receiver_id, target_account_id: status.in_reply_to_account_id).exists?         # and I'm not following the person it's a reply to
+      should_filter &&= receiver_id != status.in_reply_to_account_id                                                             # and it's not a reply to me
+      should_filter &&= status.account_id != status.in_reply_to_account_id                                                       # and it's not a self-reply
+      return false if should_filter  #filter it
     end
     return false unless add_to_feed(:list, list.id, status, list.account.user&.aggregates_reblogs?)
     trim(:list, list.id)
