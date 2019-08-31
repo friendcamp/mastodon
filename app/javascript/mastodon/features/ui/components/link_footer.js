@@ -21,8 +21,12 @@ const LinkFooter = ({ withHotkeys }) => (
     <p>
       <FormattedMessage
         id='getting_started.open_source_notice'
-        defaultMessage='Mastodon is open source software. You can contribute or report issues on GitHub at {github}. Friend Camp is also open source, at {friendcamp}.'
-        values={{ github: <span><a href={source_url} rel='noopener' target='_blank'>{repository}</a> (v{version})</span>, friendcamp: <span><a href='https://github.com/friendcamp/mastodon' rel='noopener' target='_blank'>friendcamp/mastodon</a></span> }}
+        defaultMessage='Mastodon is open source software. You can contribute or report issues on GitHub at {github}.'
+        values={{ github: <span><a href={source_url} rel='noopener' target='_blank'>{repository}</a> (v{version})</span> }}
+      /> <FormattedMessage
+        id='getting_started.hometown_open_source_notice'
+        defaultMessage='Hometown is also open source, at {hometown}.'
+        values={{ hometown: <span><a href='https://github.com/hometown-fork/hometown' rel='noopener' target='_blank'>hometown-fork/hometown</a></span> }}
       />
     </p>
   </div>

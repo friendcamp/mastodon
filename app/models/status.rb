@@ -21,8 +21,8 @@
 #  account_id             :bigint(8)        not null
 #  application_id         :bigint(8)
 #  in_reply_to_account_id :bigint(8)
-#  local_only             :boolean
 #  poll_id                :bigint(8)
+#  local_only             :boolean
 #  activity_pub_type      :string
 #
 
@@ -79,7 +79,7 @@ class Status < ApplicationRecord
   default_scope { recent }
 
   scope :recent, -> { reorder(id: :desc) }
-  scope :remote, -> { where(local: false).or(where.not(uri: nil)) }
+  scope :remote, -> { where(local: false).where.not(uri: nil) }
   scope :local,  -> { where(local: true).or(where(uri: nil)) }
 
   scope :without_replies, -> { where('statuses.reply = FALSE OR statuses.in_reply_to_account_id = statuses.account_id') }

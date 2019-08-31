@@ -588,6 +588,8 @@ en:
     people:
       one: "%{count} person"
       other: "%{count} people"
+  domain_validator:
+    invalid_domain: is not a valid domain name
   errors:
     '403': You don't have permission to view this page.
     '404': The page you are looking for isn't here.
@@ -1013,11 +1015,11 @@ en:
       <p>Originally adapted from the <a href="https://github.com/discourse/discourse">Discourse privacy policy</a>.</p>
     title: "%{instance} Terms of Service and Privacy Policy"
   themes:
-    contrast: High contrast
-    default: Mastodon
-    mastodon-light: Mastodon (light)
-    fairy-floss: Fairy Floss (by @deerful)
+    contrast: Mastodon (High contrast)
+    default: Mastodon (Dark)
+    mastodon-light: Mastodon (Light)
     macaron: Macaron (Pastel light)
+    fairy-floss: Fairy Floss (Pastel dark)
   time:
     formats:
       default: "%b %d, %Y, %H:%M"
