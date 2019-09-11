@@ -4,7 +4,7 @@ class ActivityPub::Activity
   include JsonLdHelper
   include Redisable
 
-  SUPPORTED_TYPES = %w(Note Question Article).freeze
+  SUPPORTED_TYPES = %w(Note Question Article Event).freeze
   CONVERTED_TYPES = %w(Image Video Page).freeze
 
   def initialize(json, account, **options)

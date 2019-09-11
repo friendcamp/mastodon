@@ -96,6 +96,12 @@ class Formatter
     text.html_safe # rubocop:disable Rails/OutputSafety
   end
 
+  def format_event(name)
+    text = name.gsub(/>\n+</, "><")
+    text = "<span class='event-type'>#{text}</span>"
+    text.html_safe # rubocop:disable Rails/OutputSafety
+  end
+
   def linkify(text)
     html = encode_and_link_urls(text)
     html = simple_format(html, {}, sanitize: false)
