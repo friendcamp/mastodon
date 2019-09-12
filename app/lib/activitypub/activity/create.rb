@@ -364,7 +364,7 @@ class ActivityPub::Activity::Create < ActivityPub::Activity
 
     return Formatter.instance.format_article(@object['content']) if @object['content'].present? && @object['type'] == 'Article'
 
-    return Formatter.instance.format_event(@object['name']) if @object['name'].present? && @object['type'] == 'Event'
+    return Formatter.instance.format_event(@object['name'], @object['startTime'], @object['endTime']) if @object['name'].present? && @object['type'] == 'Event'
 
     if @object['content'].present?
       @object['content']
