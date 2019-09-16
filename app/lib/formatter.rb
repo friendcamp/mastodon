@@ -99,8 +99,8 @@ class Formatter
 
   def format_event(name, startTime, endTime)
     text = name.gsub(/>\n+</, "><")
-    startTime = DateTime.rfc3339(startTime).to_datetime.strftime('%Y%m%dT%H%MZ')
-    endTime = DateTime.rfc3339(endTime).to_datetime.strftime('%Y%m%dT%H%MZ')
+    startTime = DateTime.rfc3339(startTime).to_datetime.strftime('%Y%m%dT%H%M%SZ')
+    endTime = DateTime.rfc3339(endTime).to_datetime.strftime('%Y%m%dT%H%M%SZ')
     text = "<span class='event-type'>#{text}</span><p><a href='https://www.google.com/calendar/render?action=TEMPLATE&text=#{text}&dates=#{startTime}%2F#{endTime}'>(Google Calendar)</a></p>"
     
     text.html_safe # rubocop:disable Rails/OutputSafety
