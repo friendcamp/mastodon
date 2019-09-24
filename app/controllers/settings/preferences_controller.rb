@@ -45,6 +45,7 @@ class Settings::PreferencesController < Settings::BaseController
       :setting_boost_modal,
       :setting_delete_modal,
       :setting_auto_play_gif,
+      :setting_expand_usernames,
       :setting_display_media,
       :setting_expand_spoilers,
       :setting_reduce_motion,

@@ -23,6 +23,7 @@ defaults: &defaults
   boost_modal: false
   delete_modal: true
   auto_play_gif: false
+  expand_usernames: true
   display_media: 'default'
   expand_spoilers: false
   preview_sensitive_media: false

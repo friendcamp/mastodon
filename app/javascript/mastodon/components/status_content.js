@@ -8,6 +8,7 @@ import classnames from 'classnames';
 import PollContainer from 'mastodon/containers/poll_container';
 import Icon from 'mastodon/components/icon';
 import { autoPlayGif } from 'mastodon/initial_state';
+import { expandUsernames } from 'mastodon/initial_state';
 
 const MAX_HEIGHT = 642; // 20px * 32 (+ 2px padding at the top)
 
@@ -51,10 +52,12 @@ export default class StatusContent extends React.PureComponent {
       if (mention) {
         link.addEventListener('click', this.onMentionClick.bind(this, mention), false);
         link.setAttribute('title', mention.get('acct'));
-        if (mention.get('acct') === mention.get('username')) {
-          link.innerHTML = `@<span class="fc-mention-local">${mention.get('acct')}</span>`;
-        } else {
-          link.innerHTML = `@<span class="fc-mention-remote">${mention.get('acct')}</span>`;
+        if (expandUsernames) {
+          if (mention.get('acct') === mention.get('username')) {
+            link.innerHTML = `@<span class="fc-mention-local">${mention.get('username')}</span>`;
+          } else {
+            link.innerHTML = `@<span class="fc-mention-remote">${mention.get('acct')}</span>`;
+          }
         }
       } else if (link.textContent[0] === '#' || (link.previousSibling && link.previousSibling.textContent && link.previousSibling.textContent[link.previousSibling.textContent.length - 1] === '#')) {
         link.addEventListener('click', this.onHashtagClick.bind(this, link.text), false);
@@ -217,7 +220,9 @@ export default class StatusContent extends React.PureComponent {
 
       const mentionLinks = status.get('mentions').map(item => (
         <Permalink to={`/accounts/${item.get('id')}`} href={item.get('url')} key={item.get('id')} className='mention'>
-          @<span>{item.get('username')}</span>
+          @<span className={item.get('acct') === item.get('username') ? 'fc_mention_local' : 'fc_mention_remote'}>
+            {expandUsernames ? item.get('acct') : item.get('username')}
+          </span>
         </Permalink>
       )).reduce((aggregate, item) => [...aggregate, item, ' '], []);
 
