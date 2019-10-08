@@ -625,8 +625,8 @@ ActiveRecord::Schema.define(version: 2019_07_26_034905) do
     t.bigint "account_id", null: false
     t.bigint "application_id"
     t.bigint "in_reply_to_account_id"
-    t.bigint "poll_id"
     t.boolean "local_only"
+    t.bigint "poll_id"
     t.string "activity_pub_type"
     t.index ["account_id", "id", "visibility", "updated_at"], name: "index_statuses_20180106", order: { id: :desc }
     t.index ["in_reply_to_account_id"], name: "index_statuses_on_in_reply_to_account_id"
