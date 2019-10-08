@@ -65,6 +65,7 @@ export default class StatusContent extends React.PureComponent {
         link.innerHTML += `<p><audio class="fc-audio" controls src="${link.href}"></audio></p>`;
       } else {
         link.setAttribute('title', link.href);
+        link.classList.add('unhandled-link');
       }
 
       link.setAttribute('target', '_blank');
@@ -121,7 +122,7 @@ export default class StatusContent extends React.PureComponent {
   }
 
   onHashtagClick = (hashtag, e) => {
-    hashtag = hashtag.replace(/^#/, '').toLowerCase();
+    hashtag = hashtag.replace(/^#/, '');
 
     if (this.context.router && e.button === 0 && !(e.ctrlKey || e.metaKey)) {
       e.preventDefault();
@@ -237,7 +238,7 @@ export default class StatusContent extends React.PureComponent {
           <p style={{ marginBottom: hidden && status.get('mentions').isEmpty() ? '0px' : null }}>
             <span dangerouslySetInnerHTML={spoilerContent} lang={status.get('language')} />
             {' '}
-            {status.get('activity_pub_type') === 'Article' ? '' : <div><button tabIndex='0' className={`status__content__spoiler-link ${hidden ? 'status__content__spoiler-link--show-more' : 'status__content__spoiler-link--show-less'}`} onClick={this.handleSpoilerClick}>{toggleText}</button></div>}
+            {status.get('activity_pub_type') === 'Article' ? '' : <span class="show_more_button"><button tabIndex='0' className={`status__content__spoiler-link ${hidden ? 'status__content__spoiler-link--show-more' : 'status__content__spoiler-link--show-less'}`} onClick={this.handleSpoilerClick}>{toggleText}</button></span>}
           </p>
 
           {mentionsPlaceholder}
@@ -254,7 +255,7 @@ export default class StatusContent extends React.PureComponent {
       return output;
     } else if (this.props.onClick) {
       const output = [
-        <div className={classNames} ref={this.setRef} tabIndex='0' style={directionStyle} onMouseDown={this.handleMouseDown} onMouseUp={this.handleMouseUp}>
+        <div className={classNames} ref={this.setRef} tabIndex='0' style={directionStyle} onMouseDown={this.handleMouseDown} onMouseUp={this.handleMouseUp} key='status-content'>
           <div className='status__content__text status__content__text--visible' style={directionStyle} dangerouslySetInnerHTML={content} lang={status.get('language')} />
 
           {!!status.get('poll') && <PollContainer pollId={status.get('poll')} />}

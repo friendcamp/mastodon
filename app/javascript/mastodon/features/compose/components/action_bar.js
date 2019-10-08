@@ -6,7 +6,7 @@ import { defineMessages, injectIntl } from 'react-intl';
 
 const messages = defineMessages({
   edit_profile: { id: 'account.edit_profile', defaultMessage: 'Edit profile' },
-  pins: { id: 'navigation_bar.pins', defaultMessage: 'Pinned toots' },
+  pins: { id: 'navigation_bar.pins', defaultMessage: 'Pinned posts' },
   preferences: { id: 'navigation_bar.preferences', defaultMessage: 'Preferences' },
   follow_requests: { id: 'navigation_bar.follow_requests', defaultMessage: 'Follow requests' },
   favourites: { id: 'navigation_bar.favourites', defaultMessage: 'Favourites' },
@@ -23,8 +23,13 @@ class ActionBar extends React.PureComponent {
 
   static propTypes = {
     account: ImmutablePropTypes.map.isRequired,
+    onLogout: PropTypes.func.isRequired,
     intl: PropTypes.object.isRequired,
   };
+
+  handleLogout = () => {
+    this.props.onLogout();
+  }
 
   render () {
     const { intl } = this.props;
@@ -44,7 +49,7 @@ class ActionBar extends React.PureComponent {
     menu.push({ text: intl.formatMessage(messages.domain_blocks), to: '/domain_blocks' });
     menu.push({ text: intl.formatMessage(messages.filters), href: '/filters' });
     menu.push(null);
-    menu.push({ text: intl.formatMessage(messages.logout), href: '/auth/sign_out', target: null, method: 'delete' });
+    menu.push({ text: intl.formatMessage(messages.logout), action: this.handleLogout });
 
     return (
       <div className='compose__action-bar'>

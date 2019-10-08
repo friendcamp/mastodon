@@ -10,7 +10,7 @@ import { defineMessages, injectIntl } from 'react-intl';
 import ImmutablePureComponent from 'react-immutable-pure-component';
 
 const messages = defineMessages({
-  heading: { id: 'column.pins', defaultMessage: 'Pinned toot' },
+  heading: { id: 'column.pins', defaultMessage: 'Pinned post' },
 });
 
 const mapStateToProps = state => ({
@@ -28,6 +28,7 @@ class PinnedStatuses extends ImmutablePureComponent {
     statusIds: ImmutablePropTypes.list.isRequired,
     intl: PropTypes.object.isRequired,
     hasMore: PropTypes.bool.isRequired,
+    multiColumn: PropTypes.bool,
   };
 
   componentWillMount () {
@@ -43,16 +44,17 @@ class PinnedStatuses extends ImmutablePureComponent {
   }
 
   render () {
-    const { intl, shouldUpdateScroll, statusIds, hasMore } = this.props;
+    const { intl, shouldUpdateScroll, statusIds, hasMore, multiColumn } = this.props;
 
     return (
-      <Column icon='thumb-tack' heading={intl.formatMessage(messages.heading)} ref={this.setRef}>
+      <Column bindToDocument={!multiColumn} icon='thumb-tack' heading={intl.formatMessage(messages.heading)} ref={this.setRef}>
         <ColumnBackButtonSlim />
         <StatusList
           statusIds={statusIds}
           scrollKey='pinned_statuses'
           hasMore={hasMore}
           shouldUpdateScroll={shouldUpdateScroll}
+          bindToDocument={!multiColumn}
         />
       </Column>
     );
