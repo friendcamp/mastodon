@@ -6608,3 +6608,12 @@ div.status__content--with-spoiler {
     }
   }
 }
+
+.drawer__inner .follow-requests-reminder
+{
+	padding-left: 10px;
+
+	a.follow-requests-link {
+		color: $ui-highlight-color;
+	}
+}
