@@ -100,7 +100,7 @@ export function expandTimeline(timelineId, path, params = {}, done = noOp) {
         response.data = response.data.filter(item => item.uri.match(/localhost/));
       }
       dispatch(importFetchedStatuses(response.data));
-      dispatch(expandTimelineSuccess(timelineId, response.data, next ? next.uri : null, response.code === 206, isLoadingRecent, isLoadingMore, isLoadingRecent && preferPendingItems));
+      dispatch(expandTimelineSuccess(timelineId, response.data, next ? next.uri : null, response.status === 206, isLoadingRecent, isLoadingMore, isLoadingRecent && preferPendingItems));
       done();
     }).catch(error => {
       dispatch(expandTimelineFail(timelineId, error, isLoadingMore));
