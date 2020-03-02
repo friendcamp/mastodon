@@ -17,7 +17,9 @@ class Api::V1::Statuses::RebloggedByAccountsController < Api::BaseController
   private
 
   def load_accounts
-    default_accounts.merge(paginated_statuses).to_a
+    scope = default_accounts
+    scope = scope.where.not(id: current_account.excluded_from_timeline_account_ids) unless current_account.nil?
+    scope.merge(paginated_statuses).to_a
   end
 
   def default_accounts
@@ -64,8 +66,7 @@ class Api::V1::Statuses::RebloggedByAccountsController < Api::BaseController
     @status = Status.find(params[:status_id])
     authorize @status, :show?
   rescue Mastodon::NotPermittedError
-    # Reraise in order to get a 404 instead of a 403 error code
-    raise ActiveRecord::RecordNotFound
+    not_found
   end
 
   def pagination_params(core_params)

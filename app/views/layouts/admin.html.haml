@@ -1,4 +1,5 @@
 - content_for :header_tags do
+  = render_initial_state
   = javascript_pack_tag 'public', integrity: true, crossorigin: 'anonymous'
 
 - content_for :content do
@@ -6,13 +7,16 @@
     .sidebar-wrapper
       .sidebar-wrapper__inner
         .sidebar
-          = link_to root_path do
-            = image_pack_tag 'logo.svg', class: 'logo', alt: 'Mastodon'
+          .logo
+            %h2
+              = link_to root_url, class: 'brand' do
+                = site_title
 
           .sidebar__toggle
             .sidebar__toggle__logo
-              = link_to root_path do
-                = svg_logo_full
+              %h2
+                = link_to root_path, class: 'brand' do
+                  = site_title
 
             = link_to '#', class: 'sidebar__toggle__icon' do
               = fa_icon 'bars'
@@ -21,7 +25,12 @@
 
     .content-wrapper
       .content
-        %h2= yield :page_title
+        .content-heading
+          %h2= yield :page_title
+
+          - if :heading_actions
+            .content-heading-actions
+              = yield :heading_actions
 
         = render 'application/flashes'
 
