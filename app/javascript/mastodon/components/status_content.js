@@ -21,6 +21,7 @@ export default class StatusContent extends React.PureComponent {
   static propTypes = {
     status: ImmutablePropTypes.map.isRequired,
     expanded: PropTypes.bool,
+    showThread: PropTypes.bool,
     onExpandedToggle: PropTypes.func,
     onClick: PropTypes.func,
     collapsable: PropTypes.bool,
@@ -193,6 +194,7 @@ export default class StatusContent extends React.PureComponent {
 
     const hidden = this.props.onExpandedToggle ? !this.props.expanded : this.state.hidden;
     const renderReadMore = this.props.onClick && status.get('collapsed');
+    const renderViewThread = this.props.showThread && status.get('in_reply_to_id') && status.get('in_reply_to_account_id') === status.getIn(['account', 'id']);
 
     const content = { __html: status.get('contentHtml') };
     const spoilerContent = { __html: status.get('spoilerHtml') };
@@ -206,6 +208,12 @@ export default class StatusContent extends React.PureComponent {
     if (isRtl(status.get('search_index'))) {
       directionStyle.direction = 'rtl';
     }
+
+    const showThreadButton = (
+      <button className='status__content__read-more-button' onClick={this.props.onClick}>
+        <FormattedMessage id='status.show_thread' defaultMessage='Show thread' />
+      </button>
+    );
 
     const readMoreButton = (
       <button className='status__content__read-more-button' onClick={this.props.onClick} key='read-more'>
@@ -249,6 +257,7 @@ export default class StatusContent extends React.PureComponent {
           <div tabIndex={!hidden ? 0 : null} className={`status__content__text ${!hidden ? 'status__content__text--visible' : ''}`} style={directionStyle} dangerouslySetInnerHTML={content} />
 
           {!hidden && !!status.get('poll') && <PollContainer pollId={status.get('poll')} />}
+          {renderViewThread && showThreadButton}
         </div>,
       ];
 
@@ -263,6 +272,8 @@ export default class StatusContent extends React.PureComponent {
           <div className='status__content__text status__content__text--visible' style={directionStyle} dangerouslySetInnerHTML={content} />
 
           {!!status.get('poll') && <PollContainer pollId={status.get('poll')} />}
+
+          {renderViewThread && showThreadButton}
         </div>,
       ];
 
@@ -277,6 +288,8 @@ export default class StatusContent extends React.PureComponent {
           <div className='status__content__text status__content__text--visible' style={directionStyle} dangerouslySetInnerHTML={content} />
 
           {!!status.get('poll') && <PollContainer pollId={status.get('poll')} />}
+
+          {renderViewThread && showThreadButton}
         </div>
       );
     }
