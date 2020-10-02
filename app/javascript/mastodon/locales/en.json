@@ -464,5 +464,6 @@
   "video.mute": "Mute sound",
   "video.pause": "Pause",
   "video.play": "Play",
+  "video.loop": "Loop",
   "video.unmute": "Unmute sound"
 }

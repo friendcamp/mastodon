@@ -15,6 +15,7 @@ const messages = defineMessages({
   mute: { id: 'video.mute', defaultMessage: 'Mute sound' },
   unmute: { id: 'video.unmute', defaultMessage: 'Unmute sound' },
   download: { id: 'video.download', defaultMessage: 'Download file' },
+  loop: { id: 'video.loop', defaultMessage: 'Loop' },
 });
 
 const TICK_SIZE = 10;
@@ -47,6 +48,7 @@ class Audio extends React.PureComponent {
     duration: null,
     paused: true,
     muted: false,
+    loop: false,
     volume: 0.5,
     dragging: false,
   };
@@ -87,7 +89,7 @@ class Audio extends React.PureComponent {
     this.audio = c;
 
     if (this.audio) {
-      this.setState({ volume: this.audio.volume, muted: this.audio.muted });
+      this.setState({ volume: this.audio.volume, muted: this.audio.muted, loop: this.audio.loop });
     }
   }
 
@@ -278,6 +280,11 @@ class Audio extends React.PureComponent {
     this.audioContext = context;
   }
 
+  handleRepeat = () => {
+    this.audio.loop = !this.audio.loop;
+    this.setState({ loop: this.audio.loop });
+  }
+
   handleDownload = () => {
     fetch(this.props.src).then(res => res.blob()).then(blob => {
       const element   = document.createElement('a');
@@ -348,7 +355,7 @@ class Audio extends React.PureComponent {
 
   render () {
     const { src, intl, alt, editable, autoPlay } = this.props;
-    const { paused, muted, volume, currentTime, duration, buffer, dragging } = this.state;
+    const { paused, muted, volume, currentTime, duration, buffer, dragging, loop } = this.state;
     const progress = (currentTime / duration) * 100;
 
     return (
@@ -419,6 +426,7 @@ class Audio extends React.PureComponent {
             </div>
 
             <div className='video-player__buttons right'>
+              <button type='button' title={intl.formatMessage(messages.loop)} aria-label={intl.formatMessage(messages.loop)} onClick={this.handleRepeat}><Icon id={this.state.loop ? 'repeat' : 'long-arrow-right'} fixedWidth /></button>
               <button type='button' title={intl.formatMessage(messages.download)} aria-label={intl.formatMessage(messages.download)} onClick={this.handleDownload}><Icon id='download' fixedWidth /></button>
             </div>
           </div>
