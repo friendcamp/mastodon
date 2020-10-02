@@ -354,6 +354,7 @@ class Status extends ImmutablePureComponent {
                 src={attachment.get('url')}
                 alt={attachment.get('description')}
                 poster={attachment.get('preview_url') || status.getIn(['account', 'avatar_static'])}
+                loop={status.get('content').includes('tags/looptober')}
                 backgroundColor={attachment.getIn(['meta', 'colors', 'background'])}
                 foregroundColor={attachment.getIn(['meta', 'colors', 'foreground'])}
                 accentColor={attachment.getIn(['meta', 'colors', 'accent'])}

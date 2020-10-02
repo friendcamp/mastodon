@@ -48,7 +48,7 @@ class Audio extends React.PureComponent {
     duration: null,
     paused: true,
     muted: false,
-    loop: false,
+    loop: this.props.loop,
     volume: 0.5,
     dragging: false,
   };
@@ -89,6 +89,7 @@ class Audio extends React.PureComponent {
     this.audio = c;
 
     if (this.audio) {
+      this.audio.loop = this.props.loop;
       this.setState({ volume: this.audio.volume, muted: this.audio.muted, loop: this.audio.loop });
     }
   }
