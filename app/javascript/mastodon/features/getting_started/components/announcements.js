@@ -437,7 +437,7 @@ class Announcements extends ImmutablePureComponent {
                 intl={intl}
                 selected={index === idx}
               />
-            ))}
+            )).reverse()}
           </ReactSwipeableViews>
 
           {announcements.size > 1 && (
