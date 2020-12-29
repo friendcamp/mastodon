@@ -14,6 +14,8 @@ class StatusPolicy < ApplicationPolicy
   def show?
     return false if local_only? && (current_account.nil? || !current_account.local?)
 
+    return false if author.suspended?
+
     if requires_mention?
       owned? || mention_exists?
     elsif private?

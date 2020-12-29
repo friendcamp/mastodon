@@ -7,6 +7,7 @@ class AccountsController < ApplicationController
   include AccountControllerConcern
   include SignatureAuthentication
 
+  before_action :require_signature!, if: -> { request.format == :json && authorized_fetch_mode? }
   before_action :set_cache_headers
   before_action :set_body_classes
 
@@ -27,13 +28,8 @@ class AccountsController < ApplicationController
           return
         end
 
-        if current_user.nil?
-          @pinned_statuses = cache_collection(@account.pinned_statuses.without_local_only, Status) if show_pinned_statuses?
-        else
-          @pinned_statuses = cache_collection(@account.pinned_statuses, Status) if show_pinned_statuses?
-        end
-        @statuses        = filtered_status_page
-        @statuses        = cache_collection(@statuses, Status)
+        @pinned_statuses = cache_collection(@account.pinned_statuses.without_local_only,, Status) if show_pinned_statuses?
+        @statuses        = cached_filtered_status_page
         @rss_url         = rss_url
 
         unless @statuses.empty?
@@ -53,7 +49,7 @@ class AccountsController < ApplicationController
 
       format.json do
         expires_in 3.minutes, public: !(authorized_fetch_mode? && signed_request_account.present?)
-        render_with_cache json: @account, content_type: 'application/activity+json', serializer: ActivityPub::ActorSerializer, adapter: ActivityPub::Adapter, fields: restrict_fields_to
+        render_with_cache json: @account, content_type: 'application/activity+json', serializer: ActivityPub::ActorSerializer, adapter: ActivityPub::Adapter
       end
     end
   end
@@ -89,7 +85,7 @@ class AccountsController < ApplicationController
   end
 
   def account_media_status_ids
-    @account.media_attachments.attached.reorder(nil).select(:status_id).distinct
+    @account.media_attachments.attached.reorder(nil).select(:status_id).group(:status_id)
   end
 
   def no_replies_scope
@@ -108,6 +104,10 @@ class AccountsController < ApplicationController
 
   def username_param
     params[:username]
+  end
+
+  def skip_temporary_suspension_response?
+    request.format == :json
   end
 
   def rss_url
@@ -150,19 +150,16 @@ class AccountsController < ApplicationController
     request.path.split('.').first.ends_with?(Addressable::URI.parse("/tagged/#{params[:tag]}").normalize)
   end
 
-  def filtered_status_page
-    filtered_statuses.paginate_by_id(PAGE_SIZE, params_slice(:max_id, :min_id, :since_id))
+  def cached_filtered_status_page
+    cache_collection_paginated_by_id(
+      filtered_statuses,
+      Status,
+      PAGE_SIZE,
+      params_slice(:max_id, :min_id, :since_id)
+    )
   end
 
   def params_slice(*keys)
     params.slice(*keys).permit(*keys)
-  end
-
-  def restrict_fields_to
-    if signed_request_account.present? || public_fetch_mode?
-      # Return all fields
-    else
-      %i(id type preferred_username inbox public_key endpoints)
-    end
   end
 end
