@@ -28,7 +28,7 @@ class AccountsController < ApplicationController
           return
         end
 
-        @pinned_statuses = cache_collection(@account.pinned_statuses.without_local_only,, Status) if show_pinned_statuses?
+        @pinned_statuses = cache_collection(@account.pinned_statuses.without_local_only, Status) if show_pinned_statuses?
         @statuses        = cached_filtered_status_page
         @rss_url         = rss_url
 

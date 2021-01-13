@@ -12,6 +12,7 @@ class Api::V1::MediaController < Api::BaseController
   rescue Paperclip::Errors::NotIdentifiedByImageMagickError
     render json: file_type_error, status: 422
   rescue Paperclip::Error
+    Rails.logger.warn "#{e}"
     render json: processing_error, status: 500
   end
 
