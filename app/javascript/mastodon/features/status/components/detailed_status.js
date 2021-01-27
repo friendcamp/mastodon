@@ -18,11 +18,11 @@ import AnimatedNumber from 'mastodon/components/animated_number';
 import PictureInPicturePlaceholder from 'mastodon/components/picture_in_picture_placeholder';
 
 const messages = defineMessages({
-  local_only: { id: 'status.local_only', defaultMessage: 'This post is only visible by other users of your instance' },
   public_short: { id: 'privacy.public.short', defaultMessage: 'Public' },
   unlisted_short: { id: 'privacy.unlisted.short', defaultMessage: 'Unlisted' },
   private_short: { id: 'privacy.private.short', defaultMessage: 'Followers-only' },
   direct_short: { id: 'privacy.direct.short', defaultMessage: 'Direct' },
+  local_only: { id: 'status.local_only', defaultMessage: 'This post is only visible by other users of your instance' },
 });
 
 export default  @injectIntl
