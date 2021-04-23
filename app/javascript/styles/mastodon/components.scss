@@ -7217,24 +7217,6 @@ noscript {
   }
 }
 
-.drawer__inner__mastodon svg#hometownlogo {
-  box-sizing: border-box;
-  fill: $secondary-text-color;
-  margin: 0 0 10px 10px;
-  align-self: flex-end;
-}
-
-div.status__content,
-div.status__content--with-action,
-div.status__content--with-spoiler {
-  p {
-    span.show_more_button {
-      display: block;
-      margin: 0.25rem 0 0 0;
-    }
-  }
-}
-
 .notification,
 .status__wrapper {
   position: relative;
@@ -7362,5 +7344,23 @@ div.status__content--with-spoiler {
     color: $darker-text-color;
     margin-bottom: 15px;
     text-align: center;
+  }
+}
+
+.drawer__inner__mastodon svg#hometownlogo {
+  box-sizing: border-box;
+  fill: $secondary-text-color;
+  margin: 0 0 10px 10px;
+  align-self: flex-end;
+}
+
+div.status__content,
+div.status__content--with-action,
+div.status__content--with-spoiler {
+  p {
+    span.show_more_button {
+      display: block;
+      margin: 0.25rem 0 0 0;
+    }
   }
 }
