@@ -80,7 +80,6 @@ en:
       other: Posts
     posts_tab_heading: Posts
     posts_with_replies: Posts and replies
-    reserved_username: The username is reserved
     roles:
       admin: Admin
       bot: Bot
