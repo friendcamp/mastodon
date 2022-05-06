@@ -23,6 +23,10 @@ class ConfirmationModal extends React.PureComponent {
     closeWhenConfirm: true,
   };
 
+  static defaultProps = {
+    closeWhenConfirm: true,
+  };
+
   componentDidMount() {
     this.button.focus();
   }

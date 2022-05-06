@@ -25,11 +25,9 @@ require_relative '../lib/exceptions'
 require_relative '../lib/enumerable'
 require_relative '../lib/sanitize_ext/sanitize_config'
 require_relative '../lib/redis/namespace_extensions'
-require_relative '../lib/paperclip/schema_extensions'
-require_relative '../lib/paperclip/validation_extensions'
 require_relative '../lib/paperclip/url_generator_extensions'
 require_relative '../lib/paperclip/attachment_extensions'
-require_relative '../lib/paperclip/media_type_spoof_detector_extensions'
+require_relative '../lib/paperclip/storage_extensions'
 require_relative '../lib/paperclip/lazy_thumbnail'
 require_relative '../lib/paperclip/gif_transcoder'
 require_relative '../lib/paperclip/transcoder'
@@ -78,6 +76,7 @@ module Mastodon
       :bn,
       :br,
       :ca,
+      :ckb,
       :co,
       :cs,
       :cy,
@@ -150,10 +149,14 @@ module Mastodon
       :'zh-TW',
     ]
 
-    config.i18n.default_locale = ENV['DEFAULT_LOCALE']&.to_sym
+    config.i18n.default_locale = begin
+      custom_default_locale = ENV['DEFAULT_LOCALE']&.to_sym
 
-    unless config.i18n.available_locales.include?(config.i18n.default_locale)
-      config.i18n.default_locale = :en
+      if config.i18n.available_locales.include?(custom_default_locale)
+        custom_default_locale
+      else
+        :en
+      end
     end
 
     # config.paths.add File.join('app', 'api'), glob: File.join('**', '*.rb')
@@ -170,7 +173,6 @@ module Mastodon
       Doorkeeper::Application.send :include, ApplicationExtension
       Doorkeeper::AccessToken.send :include, AccessTokenExtension
       Devise::FailureApp.send :include, AbstractController::Callbacks
-      Devise::FailureApp.send :include, HttpAcceptLanguage::EasyAccess
       Devise::FailureApp.send :include, Localized
     end
   end

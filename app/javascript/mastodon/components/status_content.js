@@ -122,7 +122,7 @@ export default class StatusContent extends React.PureComponent {
   onMentionClick = (mention, e) => {
     if (this.context.router && e.button === 0 && !(e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      this.context.router.history.push(`/accounts/${mention.get('id')}`);
+      this.context.router.history.push(`/@${mention.get('acct')}`);
     }
   }
 
@@ -131,7 +131,7 @@ export default class StatusContent extends React.PureComponent {
 
     if (this.context.router && e.button === 0 && !(e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      this.context.router.history.push(`/timelines/tag/${hashtag}`);
+      this.context.router.history.push(`/tags/${hashtag}`);
     }
   }
 
@@ -214,7 +214,7 @@ export default class StatusContent extends React.PureComponent {
       let mentionsPlaceholder = '';
 
       const mentionLinks = status.get('mentions').map(item => (
-        <Permalink to={`/accounts/${item.get('id')}`} href={item.get('url')} key={item.get('id')} className='mention'>
+        <Permalink to={`/@${item.get('acct')}`} href={item.get('url')} key={item.get('id')} className='mention'>
           @<span className={item.get('acct') === item.get('username') ? 'fc_mention_local' : 'fc_mention_remote'}>
             {expandUsernames ? item.get('acct') : item.get('username')}
           </span>
