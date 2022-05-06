@@ -21,7 +21,7 @@ module Mastodon
     end
 
     def suffix
-      '+3.5.0'
+      '+3.5.2'
     end
 
     def to_a
