@@ -5501,7 +5501,7 @@ a.status-card.compact:hover {
 .media-gallery {
   box-sizing: border-box;
   margin-top: 8px;
-  overflow: hidden;
+  overflow: inherit;
   border-radius: 4px;
   position: relative;
   width: 100%;
@@ -5515,7 +5515,7 @@ a.status-card.compact:hover {
   float: left;
   position: relative;
   border-radius: 4px;
-  overflow: hidden;
+  overflow: inherit;
 
   &.standalone {
     .media-gallery__item-gifv-thumbnail {
@@ -7475,4 +7475,12 @@ div.status__content--with-spoiler {
       margin: 0.25rem 0 0 0;
     }
   }
+}
+
+.media-gallery__item-thumbnail img:not([alt]),
+.audio-player__canvas:not([title]),
+.video-player video:not([title]),
+.media-gallery__gifv video:not([title]) {
+  border: 2px dashed $ui-highlight-color;
+  box-sizing: border-box;
 }
