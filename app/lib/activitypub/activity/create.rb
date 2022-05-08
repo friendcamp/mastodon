@@ -448,6 +448,10 @@ class ActivityPub::Activity::Create < ActivityPub::Activity
     mime_type.present? && !MediaAttachment.supported_mime_types.include?(mime_type)
   end
 
+  def blurhash_valid_chars?(blurhash)
+    /^[\w#$%*+-.:;=?@\[\]^{|}~]+$/.match?(blurhash)
+  end
+
   def skip_download?
     return @skip_download if defined?(@skip_download)
 
