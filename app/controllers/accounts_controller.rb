@@ -29,7 +29,7 @@ class AccountsController < ApplicationController
         end
 
         if current_user.nil?
-          @pinned_statuses = cache_collection(@account.pinned_statuses.without_local_only, Status) if show_pinned_statuses?
+          @pinned_statuses = cache_collection(filtered_pinned_statuses.without_local_only, Status) if show_pinned_statuses?
         else
           @pinned_statuses = cache_collection(@account.pinned_statuses, Status) if show_pinned_statuses?
         end
@@ -48,7 +48,6 @@ class AccountsController < ApplicationController
         limit     = params[:limit].present? ? [params[:limit].to_i, PAGE_SIZE_MAX].min : PAGE_SIZE
         @statuses = filtered_statuses.without_reblogs.without_local_only.limit(limit)
         @statuses = cache_collection(@statuses, Status)
-        render xml: RSS::AccountSerializer.render(@account, @statuses, params[:tag])
       end
 
       format.json do
