@@ -37,7 +37,7 @@ class Statuses extends React.PureComponent {
   render () {
     const { isLoading, hasMore, statusIds, multiColumn } = this.props;
 
-    const emptyMessage = <FormattedMessage id='empty_column.explore_statuses' defaultMessage='We don\'t display trends on Friend Camp. Move along, nothing to see here.' />;
+    const emptyMessage = <FormattedMessage id='empty_column.explore_statuses' defaultMessage="We don't display trends on Friend Camp. Move along, nothing to see here." />;
 
     return (
       <StatusList
