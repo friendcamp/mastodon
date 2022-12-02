@@ -158,7 +158,7 @@ en:
         setting_expand_usernames: Show full username (including domain) for remote users
         setting_boost_modal: Show confirmation dialog before boosting
         setting_crop_images: Crop images in non-expanded posts to 16x9
-        setting_default_federation: Allow my posts to reach other instances by default
+        setting_default_federation: Allow my posts to reach other servers by default
         setting_default_language: Posting language
         setting_default_privacy: Posting privacy
         setting_default_sensitive: Always mark media as sensitive
