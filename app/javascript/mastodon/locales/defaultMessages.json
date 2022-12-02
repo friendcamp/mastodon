@@ -1857,7 +1857,7 @@
   {
     "descriptors": [
       {
-        "defaultMessage": "Nothing is trending right now. Check back later!",
+        "defaultMessage": "We don\'t display trends on Friend Camp. Move along, nothing to see here.",
         "id": "empty_column.explore_statuses"
       }
     ],

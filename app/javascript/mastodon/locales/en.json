@@ -171,7 +171,7 @@
   "empty_column.community": "The local timeline is empty. Write something publicly to get the ball rolling!",
   "empty_column.direct": "You don't have any direct messages yet. When you send or receive one, it will show up here.",
   "empty_column.domain_blocks": "There are no blocked domains yet.",
-  "empty_column.explore_statuses": "Nothing is trending right now. Check back later!",
+  "empty_column.explore_statuses": "We don\'t display trends on Friend Camp. Move along, nothing to see here.",
   "empty_column.favourited_statuses": "You don't have any favourite posts yet. When you favourite one, it will show up here.",
   "empty_column.favourites": "No one has favourited this post yet. When someone does, they will show up here.",
   "empty_column.follow_recommendations": "Looks like no suggestions could be generated for you. You can try using search to look for people you might know or explore trending hashtags.",
