@@ -8800,7 +8800,7 @@ div.status__content--with-spoiler {
 }
 
 @media screen and (min-width: $no-gap-breakpoint) {
-  $sidebar-width: 100%;
+  $sidebar-width: 285px;
 
   .columns-area__panels__pane--compositional {
     .columns-area__panels__pane__inner {
@@ -8813,6 +8813,7 @@ div.status__content--with-spoiler {
   }
 
   .navigation-panel {
+    max-width: $sidebar-width;
     position: fixed;
     top: 0;
     bottom: 0;
