@@ -1,37 +1,51 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import Icon from 'mastodon/components/icon';
+import classNames from 'classnames';
 
-const ColumnLink = ({ icon, text, to, href, method, badge }) => {
+const ColumnLink = ({ icon, text, to, href, method, badge, transparent, button, onClick, ...other }) => {
+  const className = classNames('column-link', { 'column-link--transparent': transparent, 'column-link--button': button });
   const badgeElement = typeof badge !== 'undefined' ? <span className='column-link__badge'>{badge}</span> : null;
+  const iconElement = typeof icon === 'string' ? <Icon id={icon} fixedWidth className='column-link__icon' /> : icon;
 
   if (href) {
     return (
-      <a href={href} className='column-link' data-method={method}>
-        <Icon id={icon} fixedWidth className='column-link__icon' />
-        {text}
+      <a href={href} className={className} data-method={method} title={text} {...other}>
+        {iconElement}
+        <span>{text}</span>
         {badgeElement}
       </a>
     );
+  } else if (button) {
+    return (
+      <button className={className} onClick={onClick} title={text} {...other}>
+        {iconElement}
+        <span>{text}</span>
+        {badgeElement}
+      </button>
+    );
   } else {
     return (
-      <Link to={to} className='column-link'>
-        <Icon id={icon} fixedWidth className='column-link__icon' />
-        {text}
+      <NavLink to={to} className={className} title={text} {...other}>
+        {iconElement}
+        <span>{text}</span>
         {badgeElement}
-      </Link>
+      </NavLink>
     );
   }
 };
 
 ColumnLink.propTypes = {
-  icon: PropTypes.string.isRequired,
+  icon: PropTypes.oneOfType([PropTypes.string, PropTypes.node]).isRequired,
   text: PropTypes.string.isRequired,
   to: PropTypes.string,
   href: PropTypes.string,
   method: PropTypes.string,
   badge: PropTypes.node,
+  transparent: PropTypes.bool,
+  button: PropTypes.bool,
+  onClick: PropTypes.function,
 };
 
 export default ColumnLink;

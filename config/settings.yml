@@ -25,6 +25,7 @@ defaults: &defaults
   expand_usernames: true
   display_media: 'default'
   expand_spoilers: false
+  expand_usernames: true
   preview_sensitive_media: false
   reduce_motion: false
   disable_swiping: false
@@ -38,6 +39,7 @@ defaults: &defaults
   use_blurhash: true
   use_pending_items: false
   trends: true
+  trends_as_landing_page: false
   trendable_by_default: false
   crop_images: true
   notification_emails:
@@ -69,10 +71,10 @@ defaults: &defaults
   bootstrap_timeline_accounts: ''
   activity_api_enabled: true
   peers_api_enabled: true
-  show_known_fediverse_at_about_page: true
   show_domain_blocks: 'disabled'
   show_domain_blocks_rationale: 'disabled'
   require_invite_text: false
+  backups_retention_period: 7
 
 development:
   <<: *defaults

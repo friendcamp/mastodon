@@ -2,88 +2,118 @@
   = site_hostname
 
 - content_for :header_tags do
-  %link{ rel: 'canonical', href: about_url }/
+  = javascript_pack_tag 'public', crossorigin: 'anonymous'
   = render partial: 'shared/og'
 
-.landing
-  .landing__brand
-    %h1
-      = link_to root_url, class: 'brand' do
-        = site_title
+.grid-4
+  .column-0
+    .public-account-header.public-account-header--no-bar
+      .public-account-header__image
+        %div{:class => ("originalheader")}
+          %h1
+            = link_to root_url, class: 'brand' do
+              = site_title
+          .box-widget
+            %p <a href="/auth/sign_in" id="login" class="btn button button-primary">Sign in</a>
+            - if !closed_registrations?
+              %p <a href="/auth/sign_up" id="register" class="btn button button-primary">Create account</a>
+            - if closed_registrations? && @instance_presenter.closed_registrations_message.present?
+              .closed
+                .rich-formatting
+                  %h3= 'Registrations closed.'
+                  %p= @instance_presenter.closed_registrations_message.html_safe
+            - if closed_registrations? && !@instance_presenter.closed_registrations_message.present?
+              %hr
+                .closed
+                  .rich-formatting
+                    %h3= 'Registrations closed.'
+                    %p= 'This server is closed to registrations.'
+  .column-1
+    .landing-page__call-to-action{ dir: 'ltr' }
+      .row
+        .row__information-board
+          .information-board__section
+            %span= t 'about.user_count_before'
+            %strong= friendly_number_to_human @instance_presenter.user_count
+            %span= t 'about.user_count_after', count: @instance_presenter.user_count
+          .information-board__section
+            %span= t 'about.status_count_before'
+            %strong= friendly_number_to_human @instance_presenter.status_count
+            %span= t 'about.status_count_after', count: @instance_presenter.status_count
+        .row__mascot
+          - if @instance_presenter.mascot&.file&.url
+            .landing-page__mascot
+              = image_tag @instance_presenter.mascot&.file&.url
+          - else
+            .landing-page__mascot{:class => ("originalmascot")}
+              %div{:class => ("originalmascotimg")}
+                = logo_as_symbol
 
-  .landing__grid
-    .landing__grid__column.landing__grid__column-registration
+  .column-2
+    .contact-widget
+      %h4= t 'about.administered_by'
+
+      = account_link_to(@instance_presenter.contact.account)
+
+      - if @instance_presenter.contact.email.present?
+        %h4
+          = succeed ':' do
+            = t 'about.contact'
+
+        = mail_to @instance_presenter.contact.email, nil, title: @instance_presenter.contact.email
+
+  .column-3
+    = render 'application/flashes'
+
+    - if @contents.blank? && @rules.empty? && (!display_blocks? || @blocks&.empty?)
+      = nothing_here
+    - else
       .box-widget
-        = render 'registration'
+        .rich-formatting
+          - unless @rules.empty?
+            %h2#rules= t('about.rules')
 
-      .directory
-        - if Setting.profile_directory
-          .directory__tag
-            = optional_link_to Setting.profile_directory, explore_path do
-              %h4
-                = fa_icon 'address-book fw'
-                = t('about.discover_users')
-                %small= t('about.browse_directory')
+            %p= t('about.rules_html')
 
-              .avatar-stack
-                - @instance_presenter.sample_accounts.each do |account|
-                  = image_tag current_account&.user&.setting_auto_play_gif ? account.avatar_original_url : account.avatar_static_url, alt: '', class: 'account__avatar'
+            %ol.rules-list
+              - @rules.each do |rule|
+                %li
+                  .rules-list__text= rule.text
 
-        - if Setting.timeline_preview
-          .directory__tag
-            = optional_link_to Setting.timeline_preview, public_timeline_path do
-              %h4
-                = fa_icon 'globe fw'
-                = t('about.see_whats_happening')
-                %small= t('about.browse_public_posts', title: site_title)
+          = @contents.html_safe
 
-        .directory__tag
-          = link_to 'https://joinmastodon.org/apps', target: '_blank', rel: 'noopener noreferrer' do
-            %h4
-              = fa_icon 'tablet fw'
-              = t('about.get_apps')
-              %small= t('about.apps_platforms', title: site_title)
+          - if display_blocks? && !@blocks.empty?
+            %h2#unavailable-content= t('about.unavailable_content')
 
-    .landing__grid__column.landing__grid__column-login
-      .box-widget
-        - if current_user.present?
-          = render 'logged_in'
-        - else
-          = render 'login'
+            %p= t('about.unavailable_content_html')
 
-      .hero-widget
-        - if @instance_presenter.hero.present? || @instance_presenter.thumbnail.present?
-          .hero-widget__img
-            = image_tag @instance_presenter.hero&.file&.url || @instance_presenter.thumbnail&.file&.url, alt: @instance_presenter.site_title
-        - else
-          %div{:class => ("originalhero")}
-            = svg_logo
-            %h1
-              = link_to root_url, class: 'brand' do
-                = site_title
+            - if (blocks = @blocks.select(&:reject_media?)) && !blocks.empty?
+              %h3= t('about.unavailable_content_description.rejecting_media_title')
+              %p= t('about.unavailable_content_description.rejecting_media')
+              = render partial: 'domain_blocks', locals: { domain_blocks: blocks }
+            - if (blocks = @blocks.select(&:silence?)) && !blocks.empty?
+              %h3= t('about.unavailable_content_description.silenced_title')
+              %p= t('about.unavailable_content_description.silenced')
+              = render partial: 'domain_blocks', locals: { domain_blocks: blocks }
+            - if (blocks = @blocks.select(&:suspend?)) && !blocks.empty?
+              %h3= t('about.unavailable_content_description.suspended_title')
+              %p= t('about.unavailable_content_description.suspended')
+              = render partial: 'domain_blocks', locals: { domain_blocks: blocks }
 
-        .hero-widget__text
-          %p
-            = @instance_presenter.site_short_description.html_safe.presence || t('about.about_mastodon_html')
-            = link_to about_more_path do
-              = t('about.learn_more')
-              = fa_icon 'angle-double-right'
+  .column-4
+    %ul.table-of-contents
+      - unless @rules.empty?
+        %li= link_to t('about.rules'), '#rules'
 
-        .hero-widget__footer
-          .hero-widget__footer__column
-            %h4= t 'about.administered_by'
+      - @table_of_contents.each do |item|
+        %li
+          = link_to item.title, "##{item.anchor}"
 
-            = account_link_to @instance_presenter.contact_account
+          - unless item.children.empty?
+            %ul
+              - item.children.each do |sub_item|
+                %li= link_to sub_item.title, "##{sub_item.anchor}"
 
-          .hero-widget__footer__column
-            %h4= t 'about.server_stats'
+      - if display_blocks? && !@blocks.empty?
+        %li= link_to t('about.unavailable_content'), '#unavailable-content'
 
-            .hero-widget__counters__wrapper
-              .hero-widget__counter
-                %strong= friendly_number_to_human @instance_presenter.user_count
-                %span= t 'about.user_count_after', count: @instance_presenter.user_count
-              .hero-widget__counter
-                %strong= friendly_number_to_human @instance_presenter.active_user_count
-                %span
-                  = t 'about.active_count_after'
-                  %abbr{ title: t('about.active_footnote') } *

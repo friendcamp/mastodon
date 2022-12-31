@@ -82,19 +82,6 @@
           display: block;
         }
       }
-
-      @media screen and (max-width: $no-gap-breakpoint) {
-        .column-0,
-        .column-1,
-        .column-3,
-        .column-4 {
-          display: none;
-        }
-
-        .column-2 h4 {
-          display: none;
-        }
-      }
     }
 
     .legal-xs {
@@ -129,6 +116,10 @@
       &:focus {
         text-decoration: underline;
       }
+    }
+
+    .word-wrap {
+      word-wrap: break-word;
     }
 
     .brand {

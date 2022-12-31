@@ -9,19 +9,14 @@
 }
 
 .logo-container {
-  margin: 100px auto 50px;
-
-  @media screen and (max-width: 500px) {
-    margin: 40px auto 0;
-  }
+  margin: 50px auto;
 
   h1 {
     display: flex;
     justify-content: center;
     align-items: center;
 
-    svg {
-      fill: $primary-text-color;
+    .logo {
       height: 42px;
       margin-right: 10px;
     }
@@ -35,7 +30,6 @@
       outline: 0;
       padding: 12px 16px;
       line-height: 32px;
-      font-family: $font-display, sans-serif;
       font-weight: 500;
       font-size: 14px;
     }
@@ -138,7 +132,7 @@
     grid-row: 3;
   }
 
-  @media screen and (max-width: $no-gap-breakpoint) {
+  @media screen and (max-width: $no-gap-breakpoint-static) {
     grid-gap: 0;
     grid-template-columns: minmax(0, 100%);
 
@@ -224,7 +218,7 @@
     }
   }
 
-  @media screen and (max-width: $no-gap-breakpoint) {
+  @media screen and (max-width: $no-gap-breakpoint-static) {
     grid-gap: 0;
     grid-template-columns: minmax(0, 100%);
 
@@ -254,38 +248,41 @@
   }
 }
 
-.originalhero {
-    width: 100%;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    justify-content: center;
-    align-items: center;
-    align-content: space-between;
+.public-layout {
+  .originalheader {
+    padding: 50px 30px 30px;
 
-    svg {
-      fill: $secondary-text-color;
-      height: 200px;
+    .logo--icon {
+      width: 140px;
     }
 
     h1 {
-      flex-grow: 2;
-      text-align: center;
-      white-space: nowrap;
-      font-family: $font-display, sans-serif;
-      font-size: 0.6rem;
-    }
-  }
+      margin-bottom: 20px;
 
-.public-layout {
-  @media screen and (max-width: $no-gap-breakpoint) {
-    padding-top: 48px;
+      a {
+        line-height: 1em;
+      }
+    }
+
+    #register {
+      margin-top: 10px;
+    }
+
+    .btn {
+      text-transform: uppercase;
+    }
+
+    .closed {
+      margin-top: 10px;
+      border-radius: 4px;
+      max-width: 400px;
+    }
   }
 
   .container {
     max-width: 960px;
 
-    @media screen and (max-width: $no-gap-breakpoint) {
+    @media screen and (max-width: $no-gap-breakpoint-static) {
       padding: 0;
     }
   }
@@ -302,7 +299,7 @@
     flex-wrap: nowrap;
     overflow: hidden;
 
-    @media screen and (max-width: $no-gap-breakpoint) {
+    @media screen and (max-width: $no-gap-breakpoint-static) {
       position: fixed;
       width: 100%;
       top: 0;
@@ -342,9 +339,8 @@
     .brand {
       display: block;
       padding: 15px;
-      white-space: nowrap;
 
-      svg {
+      .logo {
         display: block;
         height: 18px;
         width: auto;
@@ -352,7 +348,7 @@
         bottom: -2px;
         fill: $primary-text-color;
 
-        @media screen and (max-width: $no-gap-breakpoint) {
+        @media screen and (max-width: $no-gap-breakpoint-static) {
           height: 20px;
         }
       }
@@ -434,7 +430,7 @@
   }
 
   .page-header {
-    @media screen and (max-width: $no-gap-breakpoint) {
+    @media screen and (max-width: $no-gap-breakpoint-static) {
       border-bottom: 0;
     }
   }
@@ -443,6 +439,7 @@
     overflow: hidden;
     margin-bottom: 10px;
     box-shadow: 0 0 15px rgba($base-shadow-color, 0.2);
+    height: auto;
 
     &.inactive {
       opacity: 0.5;
@@ -461,72 +458,6 @@
       padding: 3px 15px;
     }
 
-    &__image {
-      border-radius: 4px 4px 0 0;
-      overflow: hidden;
-      height: 300px;
-      position: relative;
-      background: darken($ui-base-color, 12%);
-
-      &::after {
-        content: "";
-        display: block;
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        box-shadow: inset 0 -1px 1px 1px rgba($base-shadow-color, 0.15);
-        top: 0;
-        left: 0;
-      }
-
-      img {
-        object-fit: cover;
-        display: block;
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        border-radius: 4px 4px 0 0;
-      }
-
-      .originalheader {
-          width: 100%;
-          display: flex;
-          flex-direction: row;
-          flex-wrap: nowrap;
-          justify-content: center;
-          align-items: center;
-          align-content: space-between;
-
-          svg {
-            fill: $secondary-text-color;
-            height: 300px;
-          }
-
-          h1 {
-            flex-grow: 2;
-            text-align: center;
-            white-space: nowrap;
-            font-family: $font-display, sans-serif;
-          }
-        }
-
-
-
-      @media screen and (max-width: 600px) {
-        height: 200px;
-
-        .originalheader {
-          svg {
-            height: 200px;
-          }
-
-          h1 {
-            font-size: 0.5rem;
-          }
-        }
-      }
-    }
-
     &--no-bar {
       margin-bottom: 0;
 
@@ -534,13 +465,13 @@
       .public-account-header__image img {
         border-radius: 4px;
 
-        @media screen and (max-width: $no-gap-breakpoint) {
+        @media screen and (max-width: $no-gap-breakpoint-static) {
           border-radius: 0;
         }
       }
     }
 
-    @media screen and (max-width: $no-gap-breakpoint) {
+    @media screen and (max-width: $no-gap-breakpoint-static) {
       margin-bottom: 0;
       box-shadow: none;
 
@@ -618,7 +549,7 @@
         }
       }
 
-      @media screen and (max-width: $no-gap-breakpoint) {
+      @media screen and (max-width: $no-gap-breakpoint-static) {
         border-radius: 0;
       }
 
@@ -823,7 +754,7 @@
   .account__section-headline {
     border-radius: 4px 4px 0 0;
 
-    @media screen and (max-width: $no-gap-breakpoint) {
+    @media screen and (max-width: $no-gap-breakpoint-static) {
       border-radius: 0;
     }
   }
@@ -839,7 +770,7 @@
     overflow: hidden;
     margin-bottom: 10px;
 
-    @media screen and (max-width: $no-gap-breakpoint) {
+    @media screen and (max-width: $no-gap-breakpoint-static) {
       box-shadow: none;
       margin-bottom: 0;
       border-radius: 0;
@@ -850,7 +781,7 @@
       border-top: 0;
 
       a {
-        color: lighten($ui-highlight-color, 8%);
+        color: $highlight-text-color;
       }
 
       dl:first-child .verified {
@@ -890,7 +821,7 @@
       flex-direction: column;
     }
 
-    @media screen and (max-width: $no-gap-breakpoint) {
+    @media screen and (max-width: $no-gap-breakpoint-static) {
       display: block;
 
       .account-card {
@@ -923,7 +854,7 @@
       }
     }
 
-    @media screen and (max-width: $no-gap-breakpoint) {
+    @media screen and (max-width: $no-gap-breakpoint-static) {
       margin: 0;
       border-top: 1px solid lighten($ui-base-color, 8%);
 

@@ -2,7 +2,7 @@ require:
   - rubocop-rails
 
 AllCops:
-  TargetRubyVersion: 2.5
+  TargetRubyVersion: 2.7
   NewCops: disable
   Exclude:
     - 'spec/**/*'
@@ -67,9 +67,11 @@ Lint/UselessAccessModifier:
     - class_methods
 
 Metrics/AbcSize:
-  Max: 100
+  Max: 115
   Exclude:
     - 'lib/mastodon/*_cli.rb'
+  AllowedMethods:
+    - process_update
 
 Metrics/BlockLength:
   Max: 55
@@ -84,7 +86,7 @@ Metrics/BlockNesting:
 
 Metrics/ClassLength:
   CountComments: false
-  Max: 400
+  Max: 500
   Exclude:
     - 'lib/mastodon/*_cli.rb'
 
@@ -92,6 +94,8 @@ Metrics/CyclomaticComplexity:
   Max: 25
   Exclude:
     - 'lib/mastodon/*_cli.rb'
+  AllowedMethods:
+    - process_update
 
 Layout/LineLength:
   AllowURI: true
@@ -113,6 +117,8 @@ Metrics/ParameterLists:
 
 Metrics/PerceivedComplexity:
   Max: 25
+  AllowedMethods:
+    - process_update
 
 Naming/MemoizedInstanceVariableName:
   Enabled: false
@@ -280,6 +286,9 @@ Style/RedundantRegexpEscape:
 
 Style/RedundantReturn:
   Enabled: true
+
+Style/RedundantBegin:
+  Enabled: false
 
 Style/RegexpLiteral:
   Enabled: false

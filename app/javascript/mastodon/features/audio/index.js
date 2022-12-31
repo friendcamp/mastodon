@@ -1,6 +1,6 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { defineMessages, injectIntl } from 'react-intl';
+import { defineMessages, FormattedMessage, injectIntl } from 'react-intl';
 import { formatTime } from 'mastodon/features/video';
 import Icon from 'mastodon/components/icon';
 import classNames from 'classnames';
@@ -8,6 +8,9 @@ import { throttle } from 'lodash';
 import { getPointerPosition, fileNameFromURL } from 'mastodon/features/video';
 import { debounce } from 'lodash';
 import Visualizer from './visualizer';
+import { displayMedia, useBlurhash } from '../../initial_state';
+import Blurhash from '../../components/blurhash';
+import { is } from 'immutable';
 
 const messages = defineMessages({
   play: { id: 'video.play', defaultMessage: 'Play' },
@@ -15,7 +18,8 @@ const messages = defineMessages({
   mute: { id: 'video.mute', defaultMessage: 'Mute sound' },
   unmute: { id: 'video.unmute', defaultMessage: 'Unmute sound' },
   download: { id: 'video.download', defaultMessage: 'Download file' },
-  loop: { id: 'video.loop', defaultMessage: 'Loop' },
+  hide: { id: 'audio.hide', defaultMessage: 'Hide audio' },
+  no_descriptive_text: { id: 'media.no_descriptive_text', defaultMessage: 'No descriptive text was provided for this media.' },
 });
 
 const TICK_SIZE = 10;
@@ -31,10 +35,14 @@ class Audio extends React.PureComponent {
     duration: PropTypes.number,
     width: PropTypes.number,
     height: PropTypes.number,
+    sensitive: PropTypes.bool,
     editable: PropTypes.bool,
     fullscreen: PropTypes.bool,
     intl: PropTypes.object.isRequired,
+    blurhash: PropTypes.string,
     cacheWidth: PropTypes.func,
+    visible: PropTypes.bool,
+    onToggleVisibility: PropTypes.func,
     backgroundColor: PropTypes.string,
     foregroundColor: PropTypes.string,
     accentColor: PropTypes.string,
@@ -52,9 +60,9 @@ class Audio extends React.PureComponent {
     duration: null,
     paused: true,
     muted: false,
-    loop: this.props.loop,
     volume: 0.5,
     dragging: false,
+    revealed: this.props.visible !== undefined ? this.props.visible : (displayMedia !== 'hide_all' && !this.props.sensitive || displayMedia === 'show_all'),
   };
 
   constructor (props) {
@@ -80,6 +88,8 @@ class Audio extends React.PureComponent {
       backgroundColor: this.props.backgroundColor,
       foregroundColor: this.props.foregroundColor,
       accentColor: this.props.accentColor,
+      sensitive: this.props.sensitive,
+      visible: this.props.visible,
     };
   }
 
@@ -106,8 +116,7 @@ class Audio extends React.PureComponent {
     this.audio = c;
 
     if (this.audio) {
-      this.audio.loop = this.props.loop;
-      this.setState({ volume: this.audio.volume, muted: this.audio.muted, loop: this.audio.loop });
+      this.setState({ volume: this.audio.volume, muted: this.audio.muted });
     }
   }
 
@@ -126,6 +135,12 @@ class Audio extends React.PureComponent {
     if (prevProps.src !== this.props.src || this.state.width !== prevState.width || this.state.height !== prevState.height || prevProps.accentColor !== this.props.accentColor) {
       this._clear();
       this._draw();
+    }
+  }
+
+  componentWillReceiveProps (nextProps) {
+    if (!is(nextProps.visible, this.props.visible) && nextProps.visible !== undefined) {
+      this.setState({ revealed: nextProps.visible });
     }
   }
 
@@ -190,6 +205,14 @@ class Audio extends React.PureComponent {
     this.setState({ muted }, () => {
       this.audio.muted = muted;
     });
+  }
+
+  toggleReveal = () => {
+    if (this.props.onToggleVisibility) {
+      this.props.onToggleVisibility();
+    } else {
+      this.setState({ revealed: !this.state.revealed });
+    }
   }
 
   handleVolumeMouseDown = e => {
@@ -321,11 +344,6 @@ class Audio extends React.PureComponent {
     this.audioContext = context;
   }
 
-  handleRepeat = () => {
-    this.audio.loop = !this.audio.loop;
-    this.setState({ loop: this.audio.loop });
-  }
-
   handleDownload = () => {
     fetch(this.props.src).then(res => res.blob()).then(blob => {
       const element   = document.createElement('a');
@@ -441,13 +459,29 @@ class Audio extends React.PureComponent {
   }
 
   render () {
-    const { src, intl, alt, editable, autoPlay } = this.props;
-    const { paused, muted, volume, currentTime, duration, buffer, dragging, loop } = this.state;
+    const { src, intl, alt, editable, autoPlay, sensitive, blurhash } = this.props;
+    const { paused, muted, volume, currentTime, duration, buffer, dragging, revealed } = this.state;
     const progress = Math.min((currentTime / duration) * 100, 100);
 
+    let warning;
+    if (sensitive) {
+      warning = <FormattedMessage id='status.sensitive_warning' defaultMessage='Sensitive content' />;
+    } else {
+      warning = <FormattedMessage id='status.media_hidden' defaultMessage='Media hidden' />;
+    }
+
     return (
-      <div className={classNames('audio-player', { editable })} ref={this.setPlayerRef} style={{ backgroundColor: this._getBackgroundColor(), color: this._getForegroundColor(), width: '100%', height: this.props.fullscreen ? '100%' : (this.state.height || this.props.height) }} onMouseEnter={this.handleMouseEnter} onMouseLeave={this.handleMouseLeave} tabIndex='0' onKeyDown={this.handleKeyDown}>
-        <audio
+      <div className={classNames('audio-player', { editable, inactive: !revealed, 'media-missing-description': !alt })} ref={this.setPlayerRef} style={{ backgroundColor: this._getBackgroundColor(), color: this._getForegroundColor(), width: '100%', height: this.props.fullscreen ? '100%' : (this.state.height || this.props.height) }} onMouseEnter={this.handleMouseEnter} onMouseLeave={this.handleMouseLeave} tabIndex='0' onKeyDown={this.handleKeyDown}>
+
+        <Blurhash
+          hash={blurhash}
+          className={classNames('media-gallery__preview', {
+            'media-gallery__preview--hidden': revealed,
+          })}
+          dummy={!useBlurhash}
+        />
+
+        {(revealed || editable) && <audio
           src={src}
           ref={this.setAudioRef}
           preload={autoPlay ? 'auto' : 'none'}
@@ -456,7 +490,7 @@ class Audio extends React.PureComponent {
           onProgress={this.handleProgress}
           onLoadedData={this.handleLoadedData}
           crossOrigin='anonymous'
-        />
+        />}
 
         <canvas
           role='button'
@@ -472,13 +506,19 @@ class Audio extends React.PureComponent {
           aria-label={alt}
         />
 
-        <img
+        <div className={classNames('spoiler-button', { 'spoiler-button--hidden': revealed || editable })}>
+          <button type='button' className='spoiler-button__overlay' onClick={this.toggleReveal}>
+            <span className='spoiler-button__overlay__label'>{warning}</span>
+          </button>
+        </div>
+
+        {(revealed || editable) && <img
           src={this.props.poster}
           alt=''
           width={(this._getRadius() - TICK_SIZE) * 2}
           height={(this._getRadius() - TICK_SIZE) * 2}
           style={{ position: 'absolute', left: this._getCX(), top: this._getCY(), transform: 'translate(-50%, -50%)', borderRadius: '50%', pointerEvents: 'none' }}
-        />
+        />}
 
         <div className='video-player__seek' onMouseDown={this.handleMouseDown} ref={this.setSeekRef}>
           <div className='video-player__seek__buffer' style={{ width: `${buffer}%` }} />
@@ -516,9 +556,8 @@ class Audio extends React.PureComponent {
             </div>
 
             <div className='video-player__buttons right'>
-              <a title={intl.formatMessage(messages.loop)} aria-label={intl.formatMessage(messages.loop)} className='video-player__loop__icon player-button' href={this.props.src}>
-                <Icon id={this.state.loop ? 'repeat' : 'long-arrow-right'} fixedWidth />
-              </a>
+              {!alt && <button type='button' title={intl.formatMessage(messages.no_descriptive_text)} aria-label={intl.formatMessage(messages.no_descriptive_text)} className='player-button no-action media__no-description-icon' ><Icon id='exclamation-triangle' fixedWidth /></button>}
+              {!editable && <button type='button' title={intl.formatMessage(messages.hide)} aria-label={intl.formatMessage(messages.hide)} className='player-button' onClick={this.toggleReveal}><Icon id='eye-slash' fixedWidth /></button>}
               <a title={intl.formatMessage(messages.download)} aria-label={intl.formatMessage(messages.download)} className='video-player__download__icon player-button' href={this.props.src} download>
                 <Icon id={'download'} fixedWidth />
               </a>

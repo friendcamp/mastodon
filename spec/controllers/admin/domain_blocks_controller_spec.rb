@@ -4,7 +4,7 @@ RSpec.describe Admin::DomainBlocksController, type: :controller do
   render_views
 
   before do
-    sign_in Fabricate(:user, admin: true), scope: :user
+    sign_in Fabricate(:user, role: UserRole.find_by(name: 'Admin')), scope: :user
   end
 
   describe 'GET #new' do
@@ -13,6 +13,27 @@ RSpec.describe Admin::DomainBlocksController, type: :controller do
 
       expect(assigns(:domain_block)).to be_instance_of(DomainBlock)
       expect(response).to have_http_status(200)
+    end
+  end
+
+  describe 'POST #batch' do
+    it 'blocks the domains when succeeded to save' do
+      allow(DomainBlockWorker).to receive(:perform_async).and_return(true)
+
+      post :batch, params: {
+        save: '',
+        form_domain_block_batch: {
+          domain_blocks_attributes: {
+            '0' => { enabled: '1', domain: 'example.com', severity: 'silence' },
+            '1' => { enabled: '0', domain: 'mastodon.social', severity: 'suspend' },
+            '2' => { enabled: '1', domain: 'mastodon.online', severity: 'suspend' }
+          }
+        }
+      }
+
+      expect(DomainBlockWorker).to have_received(:perform_async).exactly(2).times
+      expect(flash[:notice]).to eq I18n.t('admin.domain_blocks.created_msg')
+      expect(response).to redirect_to(admin_instances_path(limited: '1'))
     end
   end
 

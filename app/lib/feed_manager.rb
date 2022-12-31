@@ -45,6 +45,8 @@ class FeedManager
       filter_from_list?(status, receiver) || filter_from_home?(status, receiver.account_id, build_crutches(receiver.account_id, [status]), :list)
     when :mentions
       filter_from_mentions?(status, receiver.id)
+    when :tags
+      filter_from_tags?(status, receiver.id, build_crutches(receiver.id, [status]))
     else
       false
     end
@@ -56,7 +58,7 @@ class FeedManager
   # @param [Boolean] update
   # @return [Boolean]
   def push_to_home(account, status, update: false)
-    return false unless add_to_feed(:home, account.id, status, account.user&.aggregates_reblogs?)
+    return false unless add_to_feed(:home, account.id, status, aggregate_reblogs: account.user&.aggregates_reblogs?)
 
     trim(:home, account.id)
     PushUpdateWorker.perform_async(account.id, status.id, "timeline:#{account.id}", { 'update' => update }) if push_update_required?("timeline:#{account.id}")
@@ -69,7 +71,7 @@ class FeedManager
   # @param [Boolean] update
   # @return [Boolean]
   def unpush_from_home(account, status, update: false)
-    return false unless remove_from_feed(:home, account.id, status, account.user&.aggregates_reblogs?)
+    return false unless remove_from_feed(:home, account.id, status, aggregate_reblogs: account.user&.aggregates_reblogs?)
 
     redis.publish("timeline:#{account.id}", Oj.dump(event: :delete, payload: status.id.to_s)) unless update
     true
@@ -87,7 +89,7 @@ class FeedManager
       should_filter = status.in_reply_to_account_id != list.account_id
       # if the account being replied to is not on this list
       should_filter &&= !ListAccount.where(list_id: list.id, account_id: status.in_reply_to_account_id).exists?
-      #if the account being replied to is not the account tat owns this list AND the account being replied to is not on this list, then don't render it on the list
+      # if the account being replied to is not the account that owns this list AND the account being replied to is not on this list, then don't render it on the list
       return false if should_filter
     end
 
@@ -100,7 +102,7 @@ class FeedManager
       return false if should_filter  #filter it
     end
 
-    return false if filter_from_list?(status, list) || !add_to_feed(:list, list.id, status, list.account.user&.aggregates_reblogs?)
+    return false if filter_from_list?(status, list) || !add_to_feed(:list, list.id, status, aggregate_reblogs: list.account.user&.aggregates_reblogs?)
 
     trim(:list, list.id)
     PushUpdateWorker.perform_async(list.account_id, status.id, "timeline:list:#{list.id}", { 'update' => update }) if push_update_required?("timeline:list:#{list.id}")
@@ -113,7 +115,7 @@ class FeedManager
   # @param [Boolean] update
   # @return [Boolean]
   def unpush_from_list(list, status, update: false)
-    return false unless remove_from_feed(:list, list.id, status, list.account.user&.aggregates_reblogs?)
+    return false unless remove_from_feed(:list, list.id, status, aggregate_reblogs: list.account.user&.aggregates_reblogs?)
 
     redis.publish("timeline:list:#{list.id}", Oj.dump(event: :delete, payload: status.id.to_s)) unless update
     true
@@ -139,7 +141,7 @@ class FeedManager
     statuses.each do |status|
       next if filter_from_home?(status, into_account.id, crutches)
 
-      add_to_feed(:home, into_account.id, status, aggregate)
+      add_to_feed(:home, into_account.id, status, aggregate_reblogs: aggregate)
     end
 
     trim(:home, into_account.id)
@@ -165,7 +167,7 @@ class FeedManager
     statuses.each do |status|
       next if filter_from_home?(status, list.account_id, crutches) || filter_from_list?(status, list)
 
-      add_to_feed(:list, list.id, status, aggregate)
+      add_to_feed(:list, list.id, status, aggregate_reblogs: aggregate)
     end
 
     trim(:list, list.id)
@@ -180,7 +182,7 @@ class FeedManager
     timeline_status_ids = redis.zrange(timeline_key, 0, -1)
 
     from_account.statuses.select('id, reblog_of_id').where(id: timeline_status_ids).reorder(nil).find_each do |status|
-      remove_from_feed(:home, into_account.id, status, into_account.user&.aggregates_reblogs?)
+      remove_from_feed(:home, into_account.id, status, aggregate_reblogs: into_account.user&.aggregates_reblogs?)
     end
   end
 
@@ -193,7 +195,7 @@ class FeedManager
     timeline_status_ids = redis.zrange(timeline_key, 0, -1)
 
     from_account.statuses.select('id, reblog_of_id').where(id: timeline_status_ids).reorder(nil).find_each do |status|
-      remove_from_feed(:list, list.id, status, list.account.user&.aggregates_reblogs?)
+      remove_from_feed(:list, list.id, status, aggregate_reblogs: list.account.user&.aggregates_reblogs?)
     end
   end
 
@@ -256,7 +258,7 @@ class FeedManager
     timeline_key = key(:home, account.id)
 
     account.statuses.limit(limit).each do |status|
-      add_to_feed(:home, account.id, status, aggregate)
+      add_to_feed(:home, account.id, status, aggregate_reblogs: aggregate)
     end
 
     account.following.includes(:account_stat).find_each do |target_account|
@@ -270,13 +272,13 @@ class FeedManager
         next if last_status_score < oldest_home_score
       end
 
-      statuses = target_account.statuses.where(visibility: [:public, :unlisted, :private]).includes(:preloadable_poll, :media_attachments, reblog: :account).limit(limit)
+      statuses = target_account.statuses.where(visibility: [:public, :unlisted, :private]).includes(:preloadable_poll, :media_attachments, :account, reblog: :account).limit(limit)
       crutches = build_crutches(account.id, statuses)
 
       statuses.each do |status|
         next if filter_from_home?(status, account.id, crutches)
 
-        add_to_feed(:home, account.id, status, aggregate)
+        add_to_feed(:home, account.id, status, aggregate_reblogs: aggregate)
       end
 
       trim(:home, account.id)
@@ -371,7 +373,6 @@ class FeedManager
   def filter_from_home?(status, receiver_id, crutches, timeline_type=:home)
     return false if receiver_id == status.account_id
     return true  if status.reply? && (status.in_reply_to_id.nil? || status.in_reply_to_account_id.nil?)
-    return true  if phrase_filtered?(status, receiver_id, :home)
     # hometown: exclusive list rules
     unless timeline_type == :list
       # find all exclusive lists
@@ -379,6 +380,7 @@ class FeedManager
       # is there a list the receiver owns with this account on it? if so, return true
       return true if ListAccount.where(list: @list, account_id: status.account_id).exists?
     end
+    return true  if crutches[:languages][status.account_id].present? && status.language.present? && !crutches[:languages][status.account_id].include?(status.language)
 
     check_for_blocks = crutches[:active_mentions][status.id] || []
     check_for_blocks.concat([status.account_id])
@@ -414,7 +416,6 @@ class FeedManager
   # @return [Boolean]
   def filter_from_mentions?(status, receiver_id)
     return true if receiver_id == status.account_id
-    return true if phrase_filtered?(status, receiver_id, :notifications)
 
     # This filter is called from NotifyService, but already after the sender of
     # the notification has been checked for mute/block. Therefore, it's not
@@ -444,32 +445,14 @@ class FeedManager
     false
   end
 
-  # Check if the status hits a phrase filter
+  # Check if a status should not be added to the home feed when it comes
+  # from a followed hashtag
   # @param [Status] status
   # @param [Integer] receiver_id
-  # @param [Symbol] context
+  # @param [Hash] crutches
   # @return [Boolean]
-  def phrase_filtered?(status, receiver_id, context)
-    active_filters = Rails.cache.fetch("filters:#{receiver_id}") { CustomFilter.where(account_id: receiver_id).active_irreversible.to_a }.to_a
-
-    active_filters.select! { |filter| filter.context.include?(context.to_s) && !filter.expired? }
-
-    active_filters.map! do |filter|
-      if filter.whole_word
-        sb = /\A[[:word:]]/.match?(filter.phrase) ? '\b' : ''
-        eb = /[[:word:]]\z/.match?(filter.phrase) ? '\b' : ''
-
-        /(?mix:#{sb}#{Regexp.escape(filter.phrase)}#{eb})/
-      else
-        /#{Regexp.escape(filter.phrase)}/i
-      end
-    end
-
-    return false if active_filters.empty?
-
-    combined_regex = Regexp.union(active_filters)
-
-    combined_regex.match?(status.proper.searchable_text)
+  def filter_from_tags?(status, receiver_id, crutches)
+    receiver_id == status.account_id || ((crutches[:active_mentions][status.id] || []) + [status.account_id]).any? { |target_account_id| crutches[:blocking][target_account_id] || crutches[:muting][target_account_id] } || crutches[:blocked_by][status.account_id] || crutches[:domain_blocking][status.account.domain]
   end
 
   # Adds a status to an account's feed, returning true if a status was
@@ -481,7 +464,7 @@ class FeedManager
   # @param [Status] status
   # @param [Boolean] aggregate_reblogs
   # @return [Boolean]
-  def add_to_feed(timeline_type, account_id, status, aggregate_reblogs = true)
+  def add_to_feed(timeline_type, account_id, status, aggregate_reblogs: true)
     timeline_key = key(timeline_type, account_id)
     reblog_key   = key(timeline_type, account_id, 'reblogs')
 
@@ -529,7 +512,7 @@ class FeedManager
   # @param [Status] status
   # @param [Boolean] aggregate_reblogs
   # @return [Boolean]
-  def remove_from_feed(timeline_type, account_id, status, aggregate_reblogs = true)
+  def remove_from_feed(timeline_type, account_id, status, aggregate_reblogs: true)
     timeline_key = key(timeline_type, account_id)
     reblog_key   = key(timeline_type, account_id, 'reblogs')
 
@@ -586,10 +569,11 @@ class FeedManager
     end
 
     crutches[:following]       = Follow.where(account_id: receiver_id, target_account_id: statuses.map(&:in_reply_to_account_id).compact).pluck(:target_account_id).index_with(true)
+    crutches[:languages]       = Follow.where(account_id: receiver_id, target_account_id: statuses.map(&:account_id)).pluck(:target_account_id, :languages).to_h
     crutches[:hiding_reblogs]  = Follow.where(account_id: receiver_id, target_account_id: statuses.map { |s| s.account_id if s.reblog? }.compact, show_reblogs: false).pluck(:target_account_id).index_with(true)
     crutches[:blocking]        = Block.where(account_id: receiver_id, target_account_id: check_for_blocks).pluck(:target_account_id).index_with(true)
     crutches[:muting]          = Mute.where(account_id: receiver_id, target_account_id: check_for_blocks).pluck(:target_account_id).index_with(true)
-    crutches[:domain_blocking] = AccountDomainBlock.where(account_id: receiver_id, domain: statuses.map { |s| s.reblog&.account&.domain }.compact).pluck(:domain).index_with(true)
+    crutches[:domain_blocking] = AccountDomainBlock.where(account_id: receiver_id, domain: statuses.flat_map { |s| [s.account.domain, s.reblog&.account&.domain] }.compact).pluck(:domain).index_with(true)
     crutches[:blocked_by]      = Block.where(target_account_id: receiver_id, account_id: statuses.map { |s| s.reblog&.account_id }.compact).pluck(:account_id).index_with(true)
 
     crutches

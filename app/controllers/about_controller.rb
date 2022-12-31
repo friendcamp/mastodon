@@ -12,15 +12,13 @@ class AboutController < ApplicationController
 
   skip_before_action :require_functional!, only: [:more, :terms]
 
-  def show; end
-
-  def more
+  def show
     flash.now[:notice] = I18n.t('about.instance_actor_flash') if params[:instance_actor]
 
-    toc_generator = TOCGenerator.new(@instance_presenter.site_extended_description)
+    toc_generator = TOCGenerator.new(@instance_presenter.extended_description)
 
     @rules             = Rule.ordered
-    @contents          = toc_generator.html
+    @contents          = markdown.render(toc_generator.html)
     @table_of_contents = toc_generator.toc
     @blocks            = DomainBlock.with_user_facing_limitations.by_severity if display_blocks?
   end
@@ -33,6 +31,10 @@ class AboutController < ApplicationController
   helper_method :new_user
 
   private
+
+  def markdown
+    @markdown ||= Redcarpet::Markdown.new(Redcarpet::Render::HTML, escape_html: true, no_images: true)
+  end
 
   def display_blocks?
     Setting.show_domain_blocks == 'all' || (Setting.show_domain_blocks == 'users' && user_signed_in?)
