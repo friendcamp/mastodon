@@ -92,18 +92,31 @@ const redisUrlToClient = async (defaultConfig, redisUrl) => {
 const numWorkers = +process.env.STREAMING_CLUSTER_NUM || (env === 'development' ? 1 : Math.max(os.cpus().length - 1, 1));
 
 /**
+ * Attempts to safely parse a string as JSON, used when both receiving a message
+ * from redis and when receiving a message from a client over a websocket
+ * connection, this is why it accepts a `req` argument.
  * @param {string} json
- * @param {any} req
- * @return {Object.<string, any>|null}
+ * @param {any?} req
+ * @returns {Object.<string, any>|null}
  */
 const parseJSON = (json, req) => {
   try {
     return JSON.parse(json);
   } catch (err) {
-    if (req.accountId) {
-      log.warn(req.requestId, `Error parsing message from user ${req.accountId}: ${err}`);
+    /* FIXME: This logging isn't great, and should probably be done at the
+     * call-site of parseJSON, not in the method, but this would require changing
+     * the signature of parseJSON to return something akin to a Result type:
+     * [Error|null, null|Object<string,any}], and then handling the error
+     * scenarios.
+     */
+    if (req) {
+      if (req.accountId) {
+        log.warn(req.requestId, `Error parsing message from user ${req.accountId}: ${err}`);
+      } else {
+        log.silly(req.requestId, `Error parsing message from ${req.remoteAddress}: ${err}`);
+      }
     } else {
-      log.silly(req.requestId, `Error parsing message from ${req.remoteAddress}: ${err}`);
+      log.warn(`Error parsing message from redis: ${err}`);
     }
     return null;
   }
@@ -169,7 +182,7 @@ const startWorker = async (workerId) => {
   const redisPrefix = redisNamespace ? `${redisNamespace}:` : '';
 
   /**
-   * @type {Object.<string, Array.<function(string): void>>}
+   * @type {Object.<string, Array.<function(Object<string, any>): void>>}
    */
   const subs = {};
 
@@ -209,12 +222,21 @@ const startWorker = async (workerId) => {
       return;
     }
 
-    callbacks.forEach(callback => callback(message));
+    const json = parseJSON(message, null);
+    if (!json) return;
+
+    callbacks.forEach(callback => callback(json));
   };
 
   /**
+   * @callback SubscriptionListener
+   * @param {ReturnType<parseJSON>} json of the message
+   * @returns void
+   */
+
+  /**
    * @param {string} channel
-   * @param {function(string): void} callback
+   * @param {SubscriptionListener} callback
    */
   const subscribe = (channel, callback) => {
     log.silly(`Adding listener for ${channel}`);
@@ -231,6 +253,7 @@ const startWorker = async (workerId) => {
 
   /**
    * @param {string} channel
+   * @param {SubscriptionListener} callback
    */
   const unsubscribe = (channel, callback) => {
     log.silly(`Removing listener for ${channel}`);
@@ -380,7 +403,7 @@ const startWorker = async (workerId) => {
 
   /**
    * @param {any} req
-   * @return {string}
+   * @returns {string|undefined}
    */
   const channelNameFromPath = req => {
     const { path, query } = req;
@@ -489,15 +512,11 @@ const startWorker = async (workerId) => {
   /**
    * @param {any} req
    * @param {SystemMessageHandlers} eventHandlers
-   * @return {function(string): void}
+   * @returns {function(object): void}
    */
   const createSystemMessageListener = (req, eventHandlers) => {
     return message => {
-      const json = parseJSON(message, req);
-
-      if (!json) return;
-
-      const { event } = json;
+      const { event } = message;
 
       log.silly(req.requestId, `System message for ${req.accountId}: ${event}`);
 
@@ -612,30 +631,29 @@ const startWorker = async (workerId) => {
    * @param {string[]} ids
    * @param {any} req
    * @param {function(string, string): void} output
-   * @param {function(string[], function(string): void): void} attachCloseHandler
+   * @param {undefined | function(string[], SubscriptionListener): void} attachCloseHandler
    * @param {boolean=} needsFiltering
-   * @return {function(string): void}
+   * @returns {SubscriptionListener}
    */
   const streamFrom = (ids, req, output, attachCloseHandler, needsFiltering = false) => {
     const accountId = req.accountId || req.remoteAddress;
 
     log.verbose(req.requestId, `Starting stream from ${ids.join(', ')} for ${accountId}`);
 
+    const transmit = (event, payload) => {
+      // TODO: Replace "string"-based delete payloads with object payloads:
+      const encodedPayload = typeof payload === 'object' ? JSON.stringify(payload) : payload;
+
+      log.silly(req.requestId, `Transmitting for ${accountId}: ${event} ${encodedPayload}`);
+      output(event, encodedPayload);
+    };
+
+    // The listener used to process each message off the redis subscription,
+    // message here is an object with an `event` and `payload` property. Some
+    // events also include a queued_at value, but this is being removed shortly.
+    /** @type {SubscriptionListener} */
     const listener = message => {
-      const json = parseJSON(message, req);
-
-      if (!json) return;
-
-      const { event, payload, queued_at } = json;
-
-      const transmit = () => {
-        const now = new Date().getTime();
-        const delta = now - queued_at;
-        const encodedPayload = typeof payload === 'object' ? JSON.stringify(payload) : payload;
-
-        log.silly(req.requestId, `Transmitting for ${accountId}: ${event} ${encodedPayload} Delay: ${delta}ms`);
-        output(event, encodedPayload);
-      };
+      const { event, payload } = message;
 
       // Only send local-only statuses to logged-in users
       if (payload.local_only && !req.accountId) {
@@ -643,29 +661,42 @@ const startWorker = async (workerId) => {
         return;
       }
 
-      // Only messages that may require filtering are statuses, since notifications
-      // are already personalized and deletes do not matter
-      if (!needsFiltering || event !== 'update') {
-        transmit();
+      // Streaming only needs to apply filtering to some channels and only to
+      // some events. This is because majority of the filtering happens on the
+      // Ruby on Rails side when producing the event for streaming.
+      //
+      // The only events that require filtering from the streaming server are
+      // `update` and `status.update`, all other events are transmitted to the
+      // client as soon as they're received (pass-through).
+      //
+      // The channels that need filtering are determined in the function
+      // `channelNameToIds` defined below:
+      if (!needsFiltering || (event !== 'update' && event !== 'status.update')) {
+        transmit(event, payload);
         return;
       }
 
-      const unpackedPayload = payload;
-      const targetAccountIds = [unpackedPayload.account.id].concat(unpackedPayload.mentions.map(item => item.id));
-      const accountDomain = unpackedPayload.account.acct.split('@')[1];
+      // The rest of the logic from here on in this function is to handle
+      // filtering of statuses:
 
-      if (Array.isArray(req.chosenLanguages) && unpackedPayload.language !== null && req.chosenLanguages.indexOf(unpackedPayload.language) === -1) {
-        log.silly(req.requestId, `Message ${unpackedPayload.id} filtered by language (${unpackedPayload.language})`);
+      // Filter based on language:
+      if (Array.isArray(req.chosenLanguages) && payload.language !== null && req.chosenLanguages.indexOf(payload.language) === -1) {
+        log.silly(req.requestId, `Message ${payload.id} filtered by language (${payload.language})`);
         return;
       }
 
       // When the account is not logged in, it is not necessary to confirm the block or mute
       if (!req.accountId) {
-        transmit();
+        transmit(event, payload);
         return;
       }
 
-      pgPool.connect((err, client, done) => {
+      // Filter based on domain blocks, blocks, mutes, or custom filters:
+      const targetAccountIds = [payload.account.id].concat(payload.mentions.map(item => item.id));
+      const accountDomain = payload.account.acct.split('@')[1];
+
+      // TODO: Move this logic out of the message handling loop
+      pgPool.connect((err, client, releasePgConnection) => {
         if (err) {
           log.error(err);
           return;
@@ -680,40 +711,57 @@ const startWorker = async (workerId) => {
                         SELECT 1
                         FROM mutes
                         WHERE account_id = $1
-                          AND target_account_id IN (${placeholders(targetAccountIds, 2)})`, [req.accountId, unpackedPayload.account.id].concat(targetAccountIds)),
+                          AND target_account_id IN (${placeholders(targetAccountIds, 2)})`, [req.accountId, payload.account.id].concat(targetAccountIds)),
         ];
 
         if (accountDomain) {
           queries.push(client.query('SELECT 1 FROM account_domain_blocks WHERE account_id = $1 AND domain = $2', [req.accountId, accountDomain]));
         }
 
-        if (!unpackedPayload.filtered && !req.cachedFilters) {
+        if (!payload.filtered && !req.cachedFilters) {
           queries.push(client.query('SELECT filter.id AS id, filter.phrase AS title, filter.context AS context, filter.expires_at AS expires_at, filter.action AS filter_action, keyword.keyword AS keyword, keyword.whole_word AS whole_word FROM custom_filter_keywords keyword JOIN custom_filters filter ON keyword.custom_filter_id = filter.id WHERE filter.account_id = $1 AND (filter.expires_at IS NULL OR filter.expires_at > NOW())', [req.accountId]));
         }
 
         Promise.all(queries).then(values => {
-          done();
+          releasePgConnection();
 
+          // Handling blocks & mutes and domain blocks: If one of those applies,
+          // then we don't transmit the payload of the event to the client
           if (values[0].rows.length > 0 || (accountDomain && values[1].rows.length > 0)) {
             return;
           }
 
-          if (!unpackedPayload.filtered && !req.cachedFilters) {
+          // If the payload already contains the `filtered` property, it means
+          // that filtering has been applied on the ruby on rails side, as
+          // such, we don't need to construct or apply the filters in streaming:
+          if (Object.prototype.hasOwnProperty.call(payload, "filtered")) {
+            transmit(event, payload);
+            return;
+          }
+
+          // Handling for constructing the custom filters and caching them on the request
+          // TODO: Move this logic out of the message handling lifecycle
+          if (!req.cachedFilters) {
             const filterRows = values[accountDomain ? 2 : 1].rows;
 
-            req.cachedFilters = filterRows.reduce((cache, row) => {
-              if (cache[row.id]) {
-                cache[row.id].keywords.push([row.keyword, row.whole_word]);
+            req.cachedFilters = filterRows.reduce((cache, filter) => {
+              if (cache[filter.id]) {
+                cache[filter.id].keywords.push([filter.keyword, filter.whole_word]);
               } else {
-                cache[row.id] = {
-                  keywords: [[row.keyword, row.whole_word]],
-                  expires_at: row.expires_at,
-                  repr: {
-                    id: row.id,
-                    title: row.title,
-                    context: row.context,
-                    expires_at: row.expires_at,
-                    filter_action: ['warn', 'hide'][row.filter_action],
+                cache[filter.id] = {
+                  keywords: [[filter.keyword, filter.whole_word]],
+                  expires_at: filter.expires_at,
+                  filter: {
+                    id: filter.id,
+                    title: filter.title,
+                    context: filter.context,
+                    expires_at: filter.expires_at,
+                    // filter.filter_action is the value from the
+                    // custom_filters.action database column, it is an integer
+                    // representing a value in an enum defined by Ruby on Rails:
+                    //
+                    // enum { warn: 0, hide: 1 }
+                    filter_action: ['warn', 'hide'][filter.filter_action],
                   },
                 };
               }
@@ -721,6 +769,10 @@ const startWorker = async (workerId) => {
               return cache;
             }, {});
 
+            // Construct the regular expressions for the custom filters: This
+            // needs to be done in a separate loop as the database returns one
+            // filterRow per keyword, so we need all the keywords before
+            // constructing the regular expression
             Object.keys(req.cachedFilters).forEach((key) => {
               req.cachedFilters[key].regexp = new RegExp(req.cachedFilters[key].keywords.map(([keyword, whole_word]) => {
                 let expr = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');;
@@ -740,31 +792,58 @@ const startWorker = async (workerId) => {
             });
           }
 
-          // Check filters
-          if (req.cachedFilters && !unpackedPayload.filtered) {
-            const status = unpackedPayload;
-            const searchContent = ([status.spoiler_text || '', status.content].concat((status.poll && status.poll.options) ? status.poll.options.map(option => option.title) : [])).concat(status.media_attachments.map(att => att.description)).join('\n\n').replace(/<br\s*\/?>/g, '\n').replace(/<\/p><p>/g, '\n\n');
-            const searchIndex = JSDOM.fragment(searchContent).textContent;
+          // Apply cachedFilters against the payload, constructing a
+          // `filter_results` array of FilterResult entities
+          if (req.cachedFilters) {
+            const status = payload;
+            // TODO: Calculate searchableContent in Ruby on Rails:
+            const searchableContent = ([status.spoiler_text || '', status.content].concat((status.poll && status.poll.options) ? status.poll.options.map(option => option.title) : [])).concat(status.media_attachments.map(att => att.description)).join('\n\n').replace(/<br\s*\/?>/g, '\n').replace(/<\/p><p>/g, '\n\n');
+            const searchableTextContent = JSDOM.fragment(searchableContent).textContent;
 
             const now = new Date();
-            payload.filtered = [];
-            Object.values(req.cachedFilters).forEach((cachedFilter) => {
-              if ((cachedFilter.expires_at === null || cachedFilter.expires_at > now)) {
-                const keyword_matches = searchIndex.match(cachedFilter.regexp);
-                if (keyword_matches) {
-                  payload.filtered.push({
-                    filter: cachedFilter.repr,
-                    keyword_matches,
-                  });
-                }
+            const filter_results = Object.values(req.cachedFilters).reduce((results, cachedFilter) => {
+              // Check the filter hasn't expired before applying:
+              if (cachedFilter.expires_at !== null && cachedFilter.expires_at < now) {
+                return results;
               }
-            });
-          }
 
-          transmit();
+              // Just in-case JSDOM fails to find textContent in searchableContent
+              if (!searchableTextContent) {
+                return results;
+              }
+
+              const keyword_matches = searchableTextContent.match(cachedFilter.regexp);
+              if (keyword_matches) {
+                // results is an Array of FilterResult; status_matches is always
+                // null as we only are only applying the keyword-based custom
+                // filters, not the status-based custom filters.
+                // https://docs.joinmastodon.org/entities/FilterResult/
+                results.push({
+                  filter: cachedFilter.filter,
+                  keyword_matches,
+                  status_matches: null
+                });
+              }
+
+              return results;
+            }, []);
+
+            // Send the payload + the FilterResults as the `filtered` property
+            // to the streaming connection. To reach this code, the `event` must
+            // have been either `update` or `status.update`, meaning the
+            // `payload` is a Status entity, which has a `filtered` property:
+            //
+            // filtered: https://docs.joinmastodon.org/entities/Status/#filtered
+            transmit(event, {
+              ...payload,
+              filtered: filter_results
+            });
+          } else {
+            transmit(event, payload);
+          }
         }).catch(err => {
+          releasePgConnection();
           log.error(err);
-          done();
         });
       });
     };
@@ -773,7 +852,7 @@ const startWorker = async (workerId) => {
       subscribe(`${redisPrefix}${id}`, listener);
     });
 
-    if (attachCloseHandler) {
+    if (typeof attachCloseHandler === 'function') {
       attachCloseHandler(ids.map(id => `${redisPrefix}${id}`), listener);
     }
 
@@ -810,12 +889,13 @@ const startWorker = async (workerId) => {
   /**
    * @param {any} req
    * @param {function(): void} [closeHandler]
-   * @return {function(string[]): void}
+   * @returns {function(string[], SubscriptionListener): void}
    */
-  const streamHttpEnd = (req, closeHandler = undefined) => (ids) => {
+
+  const streamHttpEnd = (req, closeHandler = undefined) => (ids, listener) => {
     req.on('close', () => {
       ids.forEach(id => {
-        unsubscribe(id);
+        unsubscribe(id, listener);
       });
 
       if (closeHandler) {
@@ -1054,7 +1134,7 @@ const startWorker = async (workerId) => {
    * @typedef WebSocketSession
    * @property {any} socket
    * @property {any} request
-   * @property {Object.<string, { listener: function(string): void, stopHeartbeat: function(): void }>} subscriptions
+   * @property {Object.<string, { listener: SubscriptionListener, stopHeartbeat: function(): void }>} subscriptions
    */
 
   /**
@@ -1194,8 +1274,15 @@ const startWorker = async (workerId) => {
     ws.on('close', onEnd);
     ws.on('error', onEnd);
 
-    ws.on('message', data => {
-      const json = parseJSON(data, session.request);
+    ws.on('message', (data, isBinary) => {
+      if (isBinary) {
+        log.warn('socket', 'Received binary data, closing connection');
+        ws.close(1003, 'The mastodon streaming server does not support binary messages');
+        return;
+      }
+      const message = data.toString('utf8');
+
+      const json = parseJSON(message, session.request);
 
       if (!json) return;
 
