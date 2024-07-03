@@ -81,6 +81,13 @@ $content-width: 840px;
       height: 100px;
     }
 
+    // Hometown edit to remove huge logo at top of admin page on mobile
+    @media screen and (max-width: $no-gap-breakpoint - 285px - 1px) {
+      .logo {
+        display: none;
+      }
+    }
+
     .logo--wordmark {
       display: inherit;
       margin: inherit;
