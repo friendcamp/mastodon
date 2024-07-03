@@ -4,9 +4,9 @@
 
 Photo by [Joana Mujollari](https://www.flickr.com/photos/141654969@N04/26777339042/), CC0 / Public Domain.
 
-Mastodon is a **free, open-source social network server** based on ActivityPub. This is *not* the official version of Mastodon; this is a separate version (i.e. a fork) maintained by [Darius Kazemi](https://friend.camp/@darius). For more information on Mastodon, you can see the [official website](https://joinmastodon.org) and the [upstream repo](https://github.com/tootsuite/mastodon).
+Mastodon is a **free, open-source social network server** based on ActivityPub. This is _not_ the official version of Mastodon; this is a separate version (i.e. a fork) maintained by [Darius Kazemi](https://friend.camp/@darius). For more information on Mastodon, you can see the [official website](https://joinmastodon.org) and the [upstream repo](https://github.com/tootsuite/mastodon).
 
-__Hometown__ is a light weight fork of Mastodon. By "light weight" I don't mean more efficient; I mean this fork is 99.999% identical to Mastodon with a few key tweaks. This project is based on the principle of: minimum code change for maximum user experience change. This makes it easy for the basically-one-person who runs the project to keep it up to date. By our best understanding, our major changes are not wanted by the Mastodon project, hence maintaining this fork instead of trying to commit the changes to Mastodon.
+**Hometown** is a light weight fork of Mastodon. By "light weight" I don't mean more efficient; I mean this fork is 99.999% identical to Mastodon with a few key tweaks. This project is based on the principle of: minimum code change for maximum user experience change. This makes it easy for the basically-one-person who runs the project to keep it up to date. By our best understanding, our major changes are not wanted by the Mastodon project, hence maintaining this fork instead of trying to commit the changes to Mastodon.
 
 Please [check out our wiki](https://github.com/hometown-fork/hometown/wiki) for a list of Hometown-exclusive features. Some but not all of these are covered in this document.
 
@@ -84,7 +84,7 @@ Setting up your Hometown development environment is [exactly like setting up you
 
 ## License
 
-Copyright (C) 2016-2022 Eugen Rochko & other Mastodon contributors (see [AUTHORS.md](AUTHORS.md))
+Copyright (C) 2016-2023 Eugen Rochko & other Mastodon contributors (see [AUTHORS.md](AUTHORS.md))
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 

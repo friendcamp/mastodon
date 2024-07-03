@@ -17,6 +17,7 @@ describe 'Content-Security-Policy' do
       "media-src 'self' https: data: https://cb6e6126.ngrok.io",
       "frame-src 'self' https:",
       "manifest-src 'self' https://cb6e6126.ngrok.io",
+      "form-action 'self'",
       "child-src 'self' blob: https://cb6e6126.ngrok.io",
       "worker-src 'self' blob: https://cb6e6126.ngrok.io",
       "connect-src 'self' data: blob: https://cb6e6126.ngrok.io https://cb6e6126.ngrok.io ws://localhost:4000",

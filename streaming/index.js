@@ -1,95 +1,38 @@
 // @ts-check
 
-const os = require('os');
-const throng = require('throng');
+const fs = require('fs');
+const http = require('http');
+const url = require('url');
+
 const dotenv = require('dotenv');
 const express = require('express');
-const http = require('http');
-const redis = require('redis');
-const pg = require('pg');
-const log = require('npmlog');
-const url = require('url');
-const uuid = require('uuid');
-const fs = require('fs');
-const WebSocket = require('ws');
+const Redis = require('ioredis');
 const { JSDOM } = require('jsdom');
+const log = require('npmlog');
+const pg = require('pg');
+const dbUrlToConfig = require('pg-connection-string').parse;
+const metrics = require('prom-client');
+const uuid = require('uuid');
+const WebSocket = require('ws');
 
-const env = process.env.NODE_ENV || 'development';
-const alwaysRequireAuth = process.env.LIMITED_FEDERATION_MODE === 'true' || process.env.WHITELIST_MODE === 'true' || process.env.AUTHORIZED_FETCH === 'true';
+const environment = process.env.NODE_ENV || 'development';
 
 dotenv.config({
-  path: env === 'production' ? '.env.production' : '.env',
+  path: environment === 'production' ? '.env.production' : '.env',
 });
 
 log.level = process.env.LOG_LEVEL || 'verbose';
 
 /**
- * @param {string} dbUrl
- * @return {Object.<string, any>}
+ * @param {Object.<string, any>} config
  */
-const dbUrlToConfig = (dbUrl) => {
-  if (!dbUrl) {
-    return {};
-  }
-
-  const params = url.parse(dbUrl, true);
-  const config = {};
-
-  if (params.auth) {
-    [config.user, config.password] = params.auth.split(':');
-  }
-
-  if (params.hostname) {
-    config.host = params.hostname;
-  }
-
-  if (params.port) {
-    config.port = params.port;
-  }
-
-  if (params.pathname) {
-    config.database = params.pathname.split('/')[1];
-  }
-
-  const ssl = params.query && params.query.ssl;
-
-  if (ssl && ssl === 'true' || ssl === '1') {
-    config.ssl = true;
-  }
-
-  return config;
-};
-
-/**
- * @param {Object.<string, any>} defaultConfig
- * @param {string} redisUrl
- */
-const redisUrlToClient = async (defaultConfig, redisUrl) => {
-  const config = defaultConfig;
-
-  let client;
-
-  if (!redisUrl) {
-    client = redis.createClient(config);
-  } else if (redisUrl.startsWith('unix://')) {
-    client = redis.createClient(Object.assign(config, {
-      socket: {
-        path: redisUrl.slice(7),
-      },
-    }));
-  } else {
-    client = redis.createClient(Object.assign(config, {
-      url: redisUrl,
-    }));
-  }
-
+const createRedisClient = async (config) => {
+  const { redisParams, redisUrl } = config;
+  const client = new Redis(redisUrl, redisParams);
   client.on('error', (err) => log.error('Redis Client Error!', err));
-  await client.connect();
 
   return client;
 };
-
-const numWorkers = +process.env.STREAMING_CLUSTER_NUM || (env === 'development' ? 1 : Math.max(os.cpus().length - 1, 1));
 
 /**
  * Attempts to safely parse a string as JSON, used when both receiving a message
@@ -122,76 +65,229 @@ const parseJSON = (json, req) => {
   }
 };
 
-const startMaster = () => {
-  if (!process.env.SOCKET && process.env.PORT && isNaN(+process.env.PORT)) {
-    log.warn('UNIX domain socket is now supported by using SOCKET. Please migrate from PORT hack.');
-  }
-
-  log.warn(`Starting streaming API server master with ${numWorkers} workers`);
-};
-
-const startWorker = async (workerId) => {
-  log.warn(`Starting worker ${workerId}`);
-
+/**
+ * @param {Object.<string, any>} env the `process.env` value to read configuration from
+ * @returns {Object.<string, any>} the configuration for the PostgreSQL connection
+ */
+const pgConfigFromEnv = (env) => {
   const pgConfigs = {
     development: {
-      user:     process.env.DB_USER || pg.defaults.user,
-      password: process.env.DB_PASS || pg.defaults.password,
-      database: process.env.DB_NAME || 'mastodon_development',
-      host:     process.env.DB_HOST || pg.defaults.host,
-      port:     process.env.DB_PORT || pg.defaults.port,
-      max:      10,
+      user:     env.DB_USER || pg.defaults.user,
+      password: env.DB_PASS || pg.defaults.password,
+      database: env.DB_NAME || 'mastodon_development',
+      host:     env.DB_HOST || pg.defaults.host,
+      port:     env.DB_PORT || pg.defaults.port,
     },
 
     production: {
-      user:     process.env.DB_USER || 'mastodon',
-      password: process.env.DB_PASS || '',
-      database: process.env.DB_NAME || 'mastodon_production',
-      host:     process.env.DB_HOST || 'localhost',
-      port:     process.env.DB_PORT || 5432,
-      max:      10,
+      user:     env.DB_USER || 'mastodon',
+      password: env.DB_PASS || '',
+      database: env.DB_NAME || 'mastodon_production',
+      host:     env.DB_HOST || 'localhost',
+      port:     env.DB_PORT || 5432,
     },
   };
 
-  if (!!process.env.DB_SSLMODE && process.env.DB_SSLMODE !== 'disable') {
-    pgConfigs.development.ssl = true;
-    pgConfigs.production.ssl = true;
+  let baseConfig;
+
+  if (env.DATABASE_URL) {
+    baseConfig = dbUrlToConfig(env.DATABASE_URL);
+
+    // Support overriding the database password in the connection URL
+    if (!baseConfig.password && env.DB_PASS) {
+      baseConfig.password = env.DB_PASS;
+    }
+  } else {
+    baseConfig = pgConfigs[environment];
+
+    if (env.DB_SSLMODE) {
+      switch(env.DB_SSLMODE) {
+      case 'disable':
+      case '':
+        baseConfig.ssl = false;
+        break;
+      case 'no-verify':
+        baseConfig.ssl = { rejectUnauthorized: false };
+        break;
+      default:
+        baseConfig.ssl = {};
+        break;
+      }
+    }
   }
 
+  return {
+    ...baseConfig,
+    max: env.DB_POOL || 10,
+    connectionTimeoutMillis: 15000,
+    application_name: '',
+  };
+};
+
+/**
+ * @param {Object.<string, any>} env the `process.env` value to read configuration from
+ * @returns {Object.<string, any>} configuration for the Redis connection
+ */
+const redisConfigFromEnv = (env) => {
+  // ioredis *can* transparently add prefixes for us, but it doesn't *in some cases*,
+  // which means we can't use it. But this is something that should be looked into.
+  const redisPrefix = env.REDIS_NAMESPACE ? `${env.REDIS_NAMESPACE}:` : '';
+
+  const redisParams = {
+    host: env.REDIS_HOST || '127.0.0.1',
+    port: env.REDIS_PORT || 6379,
+    db: env.REDIS_DB || 0,
+    password: env.REDIS_PASSWORD || undefined,
+  };
+
+  // redisParams.path takes precedence over host and port.
+  if (env.REDIS_URL && env.REDIS_URL.startsWith('unix://')) {
+    redisParams.path = env.REDIS_URL.slice(7);
+  }
+
+  return {
+    redisParams,
+    redisPrefix,
+    redisUrl: env.REDIS_URL,
+  };
+};
+
+const PUBLIC_CHANNELS = [
+  'public',
+  'public:media',
+  'public:local',
+  'public:local:media',
+  'public:remote',
+  'public:remote:media',
+  'hashtag',
+  'hashtag:local',
+];
+
+// Used for priming the counters/gauges for the various metrics that are
+// per-channel
+const CHANNEL_NAMES = [
+  'system',
+  'user',
+  'user:notification',
+  'list',
+  'direct',
+  ...PUBLIC_CHANNELS
+];
+
+const startServer = async () => {
   const app = express();
 
   app.set('trust proxy', process.env.TRUSTED_PROXY_IP ? process.env.TRUSTED_PROXY_IP.split(/(?:\s*,\s*|\s+)/) : 'loopback,uniquelocal');
 
-  const pgPool = new pg.Pool(Object.assign(pgConfigs[env], dbUrlToConfig(process.env.DATABASE_URL)));
+  const pgPool = new pg.Pool(pgConfigFromEnv(process.env));
   const server = http.createServer(app);
-  const redisNamespace = process.env.REDIS_NAMESPACE || null;
-
-  const redisParams = {
-    socket: {
-      host: process.env.REDIS_HOST || '127.0.0.1',
-      port: process.env.REDIS_PORT || 6379,
-    },
-    database: process.env.REDIS_DB || 0,
-    password: process.env.REDIS_PASSWORD || undefined,
-  };
-
-  if (redisNamespace) {
-    redisParams.namespace = redisNamespace;
-  }
-
-  const redisPrefix = redisNamespace ? `${redisNamespace}:` : '';
 
   /**
    * @type {Object.<string, Array.<function(Object<string, any>): void>>}
    */
   const subs = {};
 
-  const redisSubscribeClient = await redisUrlToClient(redisParams, process.env.REDIS_URL);
-  const redisClient = await redisUrlToClient(redisParams, process.env.REDIS_URL);
+  const redisConfig = redisConfigFromEnv(process.env);
+  const redisSubscribeClient = await createRedisClient(redisConfig);
+  const redisClient = await createRedisClient(redisConfig);
+  const { redisPrefix } = redisConfig;
+
+  // Collect metrics from Node.js
+  metrics.collectDefaultMetrics();
+
+  new metrics.Gauge({
+    name: 'pg_pool_total_connections',
+    help: 'The total number of clients existing within the pool',
+    collect() {
+      this.set(pgPool.totalCount);
+    },
+  });
+
+  new metrics.Gauge({
+    name: 'pg_pool_idle_connections',
+    help: 'The number of clients which are not checked out but are currently idle in the pool',
+    collect() {
+      this.set(pgPool.idleCount);
+    },
+  });
+
+  new metrics.Gauge({
+    name: 'pg_pool_waiting_queries',
+    help: 'The number of queued requests waiting on a client when all clients are checked out',
+    collect() {
+      this.set(pgPool.waitingCount);
+    },
+  });
+
+  const connectedClients = new metrics.Gauge({
+    name: 'connected_clients',
+    help: 'The number of clients connected to the streaming server',
+    labelNames: ['type'],
+  });
+
+  const connectedChannels = new metrics.Gauge({
+    name: 'connected_channels',
+    help: 'The number of channels the streaming server is streaming to',
+    labelNames: [ 'type', 'channel' ]
+  });
+
+  const redisSubscriptions = new metrics.Gauge({
+    name: 'redis_subscriptions',
+    help: 'The number of Redis channels the streaming server is subscribed to',
+  });
+
+  const redisMessagesReceived = new metrics.Counter({
+    name: 'redis_messages_received_total',
+    help: 'The total number of messages the streaming server has received from redis subscriptions'
+  });
+
+  const messagesSent = new metrics.Counter({
+    name: 'messages_sent_total',
+    help: 'The total number of messages the streaming server sent to clients per connection type',
+    labelNames: [ 'type' ]
+  });
+
+  // Prime the gauges so we don't loose metrics between restarts:
+  redisSubscriptions.set(0);
+  connectedClients.set({ type: 'websocket' }, 0);
+  connectedClients.set({ type: 'eventsource' }, 0);
+
+  // For each channel, initialize the gauges at zero; There's only a finite set of channels available
+  CHANNEL_NAMES.forEach(( channel ) => {
+    connectedChannels.set({ type: 'websocket', channel }, 0);
+    connectedChannels.set({ type: 'eventsource', channel }, 0);
+  })
+
+  // Prime the counters so that we don't loose metrics between restarts.
+  // Unfortunately counters don't support the set() API, so instead I'm using
+  // inc(0) to achieve the same result.
+  redisMessagesReceived.inc(0);
+  messagesSent.inc({ type: 'websocket' }, 0);
+  messagesSent.inc({ type: 'eventsource' }, 0);
+
+  // When checking metrics in the browser, the favicon is requested this
+  // prevents the request from falling through to the API Router, which would
+  // error for this endpoint:
+  app.get('/favicon.ico', (req, res) => res.status(404).end());
+
+  app.get('/api/v1/streaming/health', (req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('OK');
+  });
+
+  app.get('/metrics', async (req, res) => {
+    try {
+      res.set('Content-Type', metrics.register.contentType);
+      res.end(await metrics.register.metrics());
+    } catch (ex) {
+      log.error(ex);
+      res.status(500).end();
+    }
+  });
 
   /**
    * @param {string[]} channels
-   * @return {function(): void}
+   * @returns {function(): void}
    */
   const subscriptionHeartbeat = channels => {
     const interval = 6 * 60;
@@ -210,13 +306,15 @@ const startWorker = async (workerId) => {
   };
 
   /**
-   * @param {string} message
    * @param {string} channel
+   * @param {string} message
    */
-  const onRedisMessage = (message, channel) => {
+  const onRedisMessage = (channel, message) => {
+    redisMessagesReceived.inc();
+
     const callbacks = subs[channel];
 
-    log.silly(`New message on channel ${channel}`);
+    log.silly(`New message on channel ${redisPrefix}${channel}`);
 
     if (!callbacks) {
       return;
@@ -227,6 +325,7 @@ const startWorker = async (workerId) => {
 
     callbacks.forEach(callback => callback(json));
   };
+  redisSubscribeClient.on("message", onRedisMessage);
 
   /**
    * @callback SubscriptionListener
@@ -245,7 +344,14 @@ const startWorker = async (workerId) => {
 
     if (subs[channel].length === 0) {
       log.verbose(`Subscribe ${channel}`);
-      redisSubscribeClient.subscribe(channel, onRedisMessage);
+      redisSubscribeClient.subscribe(channel, (err, count) => {
+        if (err) {
+          log.error(`Error subscribing to ${channel}`);
+        }
+        else {
+          redisSubscriptions.set(count);
+        }
+      });
     }
 
     subs[channel].push(callback);
@@ -266,7 +372,14 @@ const startWorker = async (workerId) => {
 
     if (subs[channel].length === 0) {
       log.verbose(`Unsubscribe ${channel}`);
-      redisSubscribeClient.unsubscribe(channel);
+      redisSubscribeClient.unsubscribe(channel, (err, count) => {
+        if (err) {
+          log.error(`Error unsubscribing to ${channel}`);
+        }
+        else {
+          redisSubscriptions.set(count);
+        }
+      });
       delete subs[channel];
     }
   };
@@ -285,7 +398,7 @@ const startWorker = async (workerId) => {
 
   /**
    * @param {any} value
-   * @return {boolean}
+   * @returns {boolean}
    */
   const isTruthy = value =>
     value && !FALSE_VALUES.includes(value);
@@ -293,7 +406,7 @@ const startWorker = async (workerId) => {
   /**
    * @param {any} req
    * @param {any} res
-   * @param {function(Error=): void}
+   * @param {function(Error=): void} next
    */
   const allowCrossDomain = (req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
@@ -306,7 +419,7 @@ const startWorker = async (workerId) => {
   /**
    * @param {any} req
    * @param {any} res
-   * @param {function(Error=): void}
+   * @param {function(Error=): void} next
    */
   const setRequestId = (req, res, next) => {
     req.requestId = uuid.v4();
@@ -318,7 +431,7 @@ const startWorker = async (workerId) => {
   /**
    * @param {any} req
    * @param {any} res
-   * @param {function(Error=): void}
+   * @param {function(Error=): void} next
    */
   const setRemoteAddress = (req, res, next) => {
     req.remoteAddress = req.connection.remoteAddress;
@@ -329,7 +442,7 @@ const startWorker = async (workerId) => {
   /**
    * @param {any} req
    * @param {string[]} necessaryScopes
-   * @return {boolean}
+   * @returns {boolean}
    */
   const isInScope = (req, necessaryScopes) =>
     req.scopes.some(scope => necessaryScopes.includes(scope));
@@ -337,7 +450,7 @@ const startWorker = async (workerId) => {
   /**
    * @param {string} token
    * @param {any} req
-   * @return {Promise.<void>}
+   * @returns {Promise.<void>}
    */
   const accountFromToken = (token, req) => new Promise((resolve, reject) => {
     pgPool.connect((err, client, done) => {
@@ -375,25 +488,19 @@ const startWorker = async (workerId) => {
 
   /**
    * @param {any} req
-   * @param {boolean=} required
-   * @return {Promise.<void>}
+   * @returns {Promise.<void>}
    */
-  const accountFromRequest = (req, required = true) => new Promise((resolve, reject) => {
+  const accountFromRequest = (req) => new Promise((resolve, reject) => {
     const authorization = req.headers.authorization;
     const location      = url.parse(req.url, true);
     const accessToken   = location.query.access_token || req.headers['sec-websocket-protocol'];
 
     if (!authorization && !accessToken) {
-      if (required) {
-        const err = new Error('Missing access token');
-        err.status = 401;
+      const err = new Error('Missing access token');
+      err.status = 401;
 
-        reject(err);
-        return;
-      } else {
-        resolve();
-        return;
-      }
+      reject(err);
+      return;
     }
 
     const token = authorization ? authorization.replace(/^Bearer /, '') : accessToken;
@@ -433,21 +540,10 @@ const startWorker = async (workerId) => {
     }
   };
 
-  const PUBLIC_CHANNELS = [
-    'public',
-    'public:media',
-    'public:local',
-    'public:local:media',
-    'public:remote',
-    'public:remote:media',
-    'hashtag',
-    'hashtag:local',
-  ];
-
   /**
    * @param {any} req
-   * @param {string} channelName
-   * @return {Promise.<void>}
+   * @param {string|undefined} channelName
+   * @returns {Promise.<void>}
    */
   const checkScopes = (req, channelName) => new Promise((resolve, reject) => {
     log.silly(req.requestId, `Checking OAuth scopes for ${channelName}`);
@@ -496,7 +592,7 @@ const startWorker = async (workerId) => {
     // variables. OAuth scope checks are moved to the point of subscription
     // to a specific stream.
 
-    accountFromRequest(info.req, alwaysRequireAuth).then(() => {
+    accountFromRequest(info.req).then(() => {
       callback(true, undefined, undefined);
     }).catch(err => {
       log.error(info.req.requestId, err.toString());
@@ -549,10 +645,14 @@ const startWorker = async (workerId) => {
     res.on('close', () => {
       unsubscribe(`${redisPrefix}${accessTokenChannelId}`, listener);
       unsubscribe(`${redisPrefix}${systemChannelId}`, listener);
+
+      connectedChannels.labels({ type: 'eventsource', channel: 'system' }).dec(2);
     });
 
     subscribe(`${redisPrefix}${accessTokenChannelId}`, listener);
     subscribe(`${redisPrefix}${systemChannelId}`, listener);
+
+    connectedChannels.labels({ type: 'eventsource', channel: 'system' }).inc(2);
   };
 
   /**
@@ -566,7 +666,19 @@ const startWorker = async (workerId) => {
       return;
     }
 
-    accountFromRequest(req, alwaysRequireAuth).then(() => checkScopes(req, channelNameFromPath(req))).then(() => {
+    const channelName = channelNameFromPath(req);
+
+    // If no channelName can be found for the request, then we should terminate
+    // the connection, as there's nothing to stream back
+    if (!channelName) {
+      const err = new Error('Unknown channel requested');
+      err.status = 400;
+
+      next(err);
+      return;
+    }
+
+    accountFromRequest(req).then(() => checkScopes(req, channelName)).then(() => {
       subscribeHttpToSystemChannel(req, res);
     }).then(() => {
       next();
@@ -596,14 +708,14 @@ const startWorker = async (workerId) => {
   /**
    * @param {array} arr
    * @param {number=} shift
-   * @return {string}
+   * @returns {string}
    */
   const placeholders = (arr, shift = 0) => arr.map((_, i) => `$${i + 1 + shift}`).join(', ');
 
   /**
    * @param {string} listId
    * @param {any} req
-   * @return {Promise.<void>}
+   * @returns {Promise.<void>}
    */
   const authorizeListAccess = (listId, req) => new Promise((resolve, reject) => {
     const { accountId } = req;
@@ -632,10 +744,11 @@ const startWorker = async (workerId) => {
    * @param {any} req
    * @param {function(string, string): void} output
    * @param {undefined | function(string[], SubscriptionListener): void} attachCloseHandler
+   * @param {'websocket' | 'eventsource'} destinationType
    * @param {boolean=} needsFiltering
    * @returns {SubscriptionListener}
    */
-  const streamFrom = (ids, req, output, attachCloseHandler, needsFiltering = false) => {
+  const streamFrom = (ids, req, output, attachCloseHandler, destinationType, needsFiltering = false) => {
     const accountId = req.accountId || req.remoteAddress;
 
     log.verbose(req.requestId, `Starting stream from ${ids.join(', ')} for ${accountId}`);
@@ -643,6 +756,8 @@ const startWorker = async (workerId) => {
     const transmit = (event, payload) => {
       // TODO: Replace "string"-based delete payloads with object payloads:
       const encodedPayload = typeof payload === 'object' ? JSON.stringify(payload) : payload;
+
+      messagesSent.labels({ type: destinationType }).inc(1);
 
       log.silly(req.requestId, `Transmitting for ${accountId}: ${event} ${encodedPayload}`);
       output(event, encodedPayload);
@@ -775,7 +890,7 @@ const startWorker = async (workerId) => {
             // constructing the regular expression
             Object.keys(req.cachedFilters).forEach((key) => {
               req.cachedFilters[key].regexp = new RegExp(req.cachedFilters[key].keywords.map(([keyword, whole_word]) => {
-                let expr = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');;
+                let expr = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
                 if (whole_word) {
                   if (/^[\w]/.test(expr)) {
@@ -842,8 +957,8 @@ const startWorker = async (workerId) => {
             transmit(event, payload);
           }
         }).catch(err => {
-          releasePgConnection();
           log.error(err);
+          releasePgConnection();
         });
       });
     };
@@ -862,10 +977,19 @@ const startWorker = async (workerId) => {
   /**
    * @param {any} req
    * @param {any} res
-   * @return {function(string, string): void}
+   * @returns {function(string, string): void}
    */
   const streamToHttp = (req, res) => {
     const accountId = req.accountId || req.remoteAddress;
+
+    const channelName = channelNameFromPath(req);
+
+    connectedClients.labels({ type: 'eventsource' }).inc();
+
+    // In theory we'll always have a channel name, but channelNameFromPath can return undefined:
+    if (typeof channelName === 'string') {
+      connectedChannels.labels({ type: 'eventsource', channel: channelName }).inc();
+    }
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-store');
@@ -877,6 +1001,14 @@ const startWorker = async (workerId) => {
 
     req.on('close', () => {
       log.verbose(req.requestId, `Ending stream for ${accountId}`);
+      // We decrement these counters here instead of in streamHttpEnd as in that
+      // method we don't have knowledge of the channel names
+      connectedClients.labels({ type: 'eventsource' }).dec();
+      // In theory we'll always have a channel name, but channelNameFromPath can return undefined:
+      if (typeof channelName === 'string') {
+        connectedChannels.labels({ type: 'eventsource', channel: channelName }).dec();
+      }
+
       clearInterval(heartbeat);
     });
 
@@ -908,7 +1040,7 @@ const startWorker = async (workerId) => {
    * @param {any} req
    * @param {any} ws
    * @param {string[]} streamName
-   * @return {function(string, string): void}
+   * @returns {function(string, string): void}
    */
   const streamToWs = (req, ws, streamName) => (event, payload) => {
     if (ws.readyState !== ws.OPEN) {
@@ -916,7 +1048,11 @@ const startWorker = async (workerId) => {
       return;
     }
 
-    ws.send(JSON.stringify({ stream: streamName, event, payload }));
+    ws.send(JSON.stringify({ stream: streamName, event, payload }), (err) => {
+      if (err) {
+        log.error(req.requestId, `Failed to send to websocket: ${err}`);
+      }
+    });
   };
 
   /**
@@ -927,24 +1063,23 @@ const startWorker = async (workerId) => {
     res.end(JSON.stringify({ error: 'Not found' }));
   };
 
-  app.use(setRequestId);
-  app.use(setRemoteAddress);
-  app.use(allowCrossDomain);
+  const api = express.Router();
 
-  app.get('/api/v1/streaming/health', (req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('OK');
-  });
+  app.use(api);
 
-  app.use(authenticationMiddleware);
-  app.use(errorMiddleware);
+  api.use(setRequestId);
+  api.use(setRemoteAddress);
+  api.use(allowCrossDomain);
 
-  app.get('/api/v1/streaming/*', (req, res) => {
+  api.use(authenticationMiddleware);
+  api.use(errorMiddleware);
+
+  api.get('/api/v1/streaming/*', (req, res) => {
     channelNameToIds(req, channelNameFromPath(req), req.query).then(({ channelIds, options }) => {
       const onSend = streamToHttp(req, res);
       const onEnd = streamHttpEnd(req, subscriptionHeartbeat(channelIds));
 
-      streamFrom(channelIds, req, onSend, onEnd, options.needsFiltering);
+      streamFrom(channelIds, req, onSend, onEnd, 'eventsource', options.needsFiltering);
     }).catch(err => {
       log.verbose(req.requestId, 'Subscription error:', err.toString());
       httpNotFound(res);
@@ -962,7 +1097,7 @@ const startWorker = async (workerId) => {
 
   /**
    * @param {any} req
-   * @return {string[]}
+   * @returns {string[]}
    */
   const channelsForUserStream = req => {
     const arr = [`timeline:${req.accountId}`];
@@ -987,7 +1122,7 @@ const startWorker = async (workerId) => {
 
   /**
    * @param {string} str
-   * @return {string}
+   * @returns {string}
    */
   const foldToASCII = str => {
     const regex = new RegExp(NON_ASCII_CHARS.split('').join('|'), 'g');
@@ -1000,7 +1135,7 @@ const startWorker = async (workerId) => {
 
   /**
    * @param {string} str
-   * @return {string}
+   * @returns {string}
    */
   const normalizeHashtag = str => {
     return foldToASCII(str.normalize('NFKC').toLowerCase()).replace(/[^\p{L}\p{N}_\u00b7\u200c]/gu, '');
@@ -1010,7 +1145,7 @@ const startWorker = async (workerId) => {
    * @param {any} req
    * @param {string} name
    * @param {StreamParams} params
-   * @return {Promise.<{ channelIds: string[], options: { needsFiltering: boolean } }>}
+   * @returns {Promise.<{ channelIds: string[], options: { needsFiltering: boolean } }>}
    */
   const channelNameToIds = (req, name, params) => new Promise((resolve, reject) => {
     switch (name) {
@@ -1118,7 +1253,7 @@ const startWorker = async (workerId) => {
   /**
    * @param {string} channelName
    * @param {StreamParams} params
-   * @return {string[]}
+   * @returns {string[]}
    */
   const streamNameFromChannelName = (channelName, params) => {
     if (channelName === 'list') {
@@ -1134,15 +1269,16 @@ const startWorker = async (workerId) => {
    * @typedef WebSocketSession
    * @property {any} socket
    * @property {any} request
-   * @property {Object.<string, { listener: SubscriptionListener, stopHeartbeat: function(): void }>} subscriptions
+   * @property {Object.<string, { channelName: string, listener: SubscriptionListener, stopHeartbeat: function(): void }>} subscriptions
    */
 
   /**
    * @param {WebSocketSession} session
    * @param {string} channelName
    * @param {StreamParams} params
+   * @returns {void}
    */
-  const subscribeWebsocketToChannel = ({ socket, request, subscriptions }, channelName, params) =>
+  const subscribeWebsocketToChannel = ({ socket, request, subscriptions }, channelName, params) => {
     checkScopes(request, channelName).then(() => channelNameToIds(request, channelName, params)).then(({
       channelIds,
       options,
@@ -1153,9 +1289,12 @@ const startWorker = async (workerId) => {
 
       const onSend = streamToWs(request, socket, streamNameFromChannelName(channelName, params));
       const stopHeartbeat = subscriptionHeartbeat(channelIds);
-      const listener = streamFrom(channelIds, request, onSend, undefined, options.needsFiltering);
+      const listener = streamFrom(channelIds, request, onSend, undefined, 'websocket', options.needsFiltering);
+
+      connectedChannels.labels({ type: 'websocket', channel: channelName }).inc();
 
       subscriptions[channelIds.join(';')] = {
+        channelName,
         listener,
         stopHeartbeat,
       };
@@ -1163,35 +1302,47 @@ const startWorker = async (workerId) => {
       log.verbose(request.requestId, 'Subscription error:', err.toString());
       socket.send(JSON.stringify({ error: err.toString() }));
     });
+  }
+
+
+  const removeSubscription = (subscriptions, channelIds, request) => {
+    log.verbose(request.requestId, `Ending stream from ${channelIds.join(', ')} for ${request.accountId}`);
+
+    const subscription = subscriptions[channelIds.join(';')];
+
+    if (!subscription) {
+      return;
+    }
+
+    channelIds.forEach(channelId => {
+      unsubscribe(`${redisPrefix}${channelId}`, subscription.listener);
+    });
+
+    connectedChannels.labels({ type: 'websocket', channel: subscription.channelName }).dec();
+    subscription.stopHeartbeat();
+
+    delete subscriptions[channelIds.join(';')];
+  }
 
   /**
    * @param {WebSocketSession} session
    * @param {string} channelName
    * @param {StreamParams} params
+   * @returns {void}
    */
-  const unsubscribeWebsocketFromChannel = ({ socket, request, subscriptions }, channelName, params) =>
+  const unsubscribeWebsocketFromChannel = ({ socket, request, subscriptions }, channelName, params) => {
     channelNameToIds(request, channelName, params).then(({ channelIds }) => {
-      log.verbose(request.requestId, `Ending stream from ${channelIds.join(', ')} for ${request.accountId}`);
-
-      const subscription = subscriptions[channelIds.join(';')];
-
-      if (!subscription) {
-        return;
-      }
-
-      const { listener, stopHeartbeat } = subscription;
-
-      channelIds.forEach(channelId => {
-        unsubscribe(`${redisPrefix}${channelId}`, listener);
-      });
-
-      stopHeartbeat();
-
-      delete subscriptions[channelIds.join(';')];
+      removeSubscription(subscriptions, channelIds, request);
     }).catch(err => {
-      log.verbose(request.requestId, 'Unsubscription error:', err);
-      socket.send(JSON.stringify({ error: err.toString() }));
+      log.verbose(request.requestId, 'Unsubscribe error:', err);
+
+      // If we have a socket that is alive and open still, send the error back to the client:
+      // FIXME: In other parts of the code ws === socket
+      if (socket.isAlive && socket.readyState === socket.OPEN) {
+        socket.send(JSON.stringify({ error: "Error unsubscribing from channel" }));
+      }
     });
+  }
 
   /**
    * @param {WebSocketSession} session
@@ -1212,21 +1363,25 @@ const startWorker = async (workerId) => {
     subscribe(`${redisPrefix}${systemChannelId}`, listener);
 
     subscriptions[accessTokenChannelId] = {
+      channelName: 'system',
       listener,
       stopHeartbeat: () => {
       },
     };
 
     subscriptions[systemChannelId] = {
+      channelName: 'system',
       listener,
       stopHeartbeat: () => {
       },
     };
+
+    connectedChannels.labels({ type: 'websocket', channel: 'system' }).inc(2);
   };
 
   /**
    * @param {string|string[]} arrayOrString
-   * @return {string}
+   * @returns {string}
    */
   const firstParam = arrayOrString => {
     if (Array.isArray(arrayOrString)) {
@@ -1237,13 +1392,17 @@ const startWorker = async (workerId) => {
   };
 
   wss.on('connection', (ws, req) => {
-    const location = url.parse(req.url, true);
+    // Note: url.parse could throw, which would terminate the connection, so we
+    // increment the connected clients metric straight away when we establish
+    // the connection, without waiting:
+    connectedClients.labels({ type: 'websocket' }).inc();
 
+    // Setup request properties:
     req.requestId = uuid.v4();
     req.remoteAddress = ws._socket.remoteAddress;
 
+    // Setup connection keep-alive state:
     ws.isAlive = true;
-
     ws.on('pong', () => {
       ws.isAlive = true;
     });
@@ -1257,26 +1416,31 @@ const startWorker = async (workerId) => {
       subscriptions: {},
     };
 
-    const onEnd = () => {
-      const keys = Object.keys(session.subscriptions);
+    ws.on('close', function onWebsocketClose() {
+      const subscriptions = Object.keys(session.subscriptions);
 
-      keys.forEach(channelIds => {
-        const { listener, stopHeartbeat } = session.subscriptions[channelIds];
-
-        channelIds.split(';').forEach(channelId => {
-          unsubscribe(`${redisPrefix}${channelId}`, listener);
-        });
-
-        stopHeartbeat();
+      subscriptions.forEach(channelIds => {
+        removeSubscription(session.subscriptions, channelIds.split(';'), req)
       });
-    };
 
-    ws.on('close', onEnd);
-    ws.on('error', onEnd);
+      // Decrement the metrics for connected clients:
+      connectedClients.labels({ type: 'websocket' }).dec();
+
+      // ensure garbage collection:
+      session.socket = null;
+      session.request = null;
+      session.subscriptions = {};
+    });
+
+    // Note: immediately after the `error` event is emitted, the `close` event
+    // is emitted. As such, all we need to do is log the error here.
+    ws.on('error', (err) => {
+      log.error('websocket', err.toString());
+    });
 
     ws.on('message', (data, isBinary) => {
       if (isBinary) {
-        log.warn('socket', 'Received binary data, closing connection');
+        log.warn('websocket', 'Received binary data, closing connection');
         ws.close(1003, 'The mastodon streaming server does not support binary messages');
         return;
       }
@@ -1299,7 +1463,10 @@ const startWorker = async (workerId) => {
 
     subscribeWebsocketToSystemChannel(session);
 
-    if (location.query.stream) {
+    // Parse the URL for the connection arguments (if supplied), url.parse can throw:
+    const location = req.url && url.parse(req.url, true);
+
+    if (location && location.query.stream) {
       subscribeWebsocketToChannel(session, firstParam(location.query.stream), location.query);
     }
   });
@@ -1317,11 +1484,10 @@ const startWorker = async (workerId) => {
   }, 30000);
 
   attachServerWithConfig(server, address => {
-    log.warn(`Worker ${workerId} now listening on ${address}`);
+    log.warn(`Streaming API now listening on ${address}`);
   });
 
   const onExit = () => {
-    log.warn(`Worker ${workerId} exiting`);
     server.close();
     process.exit(0);
   };
@@ -1359,34 +1525,4 @@ const attachServerWithConfig = (server, onSuccess) => {
   }
 };
 
-/**
- * @param {function(Error=): void} onSuccess
- */
-const onPortAvailable = onSuccess => {
-  const testServer = http.createServer();
-
-  testServer.once('error', err => {
-    onSuccess(err);
-  });
-
-  testServer.once('listening', () => {
-    testServer.once('close', () => onSuccess());
-    testServer.close();
-  });
-
-  attachServerWithConfig(testServer);
-};
-
-onPortAvailable(err => {
-  if (err) {
-    log.error('Could not start server, the port or socket is in use');
-    return;
-  }
-
-  throng({
-    workers: numWorkers,
-    lifetime: Infinity,
-    start: startWorker,
-    master: startMaster,
-  });
-});
+startServer();

@@ -27,12 +27,12 @@
           %span.display-name__account
             = acct(status.account)
             = fa_icon('lock') if status.account.locked?
-  .status__content.emojify{ :data => ({ spoiler: current_account&.user&.setting_expand_spoilers ? 'expanded' : 'folded' } if status.spoiler_text?) }<
+  .status__content.emojify{ data: ({ spoiler: current_account&.user&.setting_expand_spoilers ? 'expanded' : 'folded' } if status.spoiler_text?) }<
     - if status.spoiler_text?
       %p<
         %span.p-summary> #{prerender_custom_emojis(h(status.spoiler_text), status.emojis)}&nbsp;
         %button.status__content__spoiler-link= t('statuses.show_more')
-    .e-content{ :lang => status.language }
+    .e-content{ lang: status.language }
       = prerender_custom_emojis(status_content_format(status), status.emojis)
 
       - if status.preloadable_poll
@@ -69,5 +69,5 @@
     %span.status__action-bar-button.icon-button
       = fa_icon 'star fw'
     - if status.local_only
-      %span.status__action-bar-button.icon-button.disabled{style: 'font-size: 18px; width: 23.1429px; height: 23.1429px; line-height: 23.15px;'}<
+      %span.status__action-bar-button.icon-button.disabled
         = fa_icon 'chain-broken fw', 'title': t('statuses.local_only')

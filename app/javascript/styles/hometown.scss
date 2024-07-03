@@ -1,0 +1,63 @@
+// app/javascript/mastodon/features/account_timeline/components/header.jsx
+// Because we provide a link to the profile instead of a plain <span>, we override
+// the color to ensure it doesn't use the accent color.
+.account__header__tabs__name a {
+  color: inherit;
+}
+
+// app/javascript/mastodon/features/ui/components/navigation_panel.jsx
+// We hide the logo from the sidebar. It's kept in the JSX, to keep the modifications of the React
+// codebase as small as possible.
+.navigation-panel__logo {
+  display: none;
+}
+
+// app/views/layouts/admin.html.haml
+// The logo is set to a size of 100x100px. We don't have a funny/beautiful icon for hometown in the
+// admin sidebar, therefore we unset the dimensions [1], center the link [2] and unset the color for it [3].
+.admin-wrapper .sidebar .logo {
+  // 1
+  width: unset;
+  height: unset;
+
+  // 2
+  h2 {
+    text-align: center;
+    font-size: 1.25rem;
+  }
+
+  // 3
+  .brand {
+    color: inherit;
+  }
+}
+
+// app/views/layouts/auth.html.haml
+// Increase the default font size for the page title on the login screen.
+.logo-container h1 a {
+  font-size: 1.5rem;
+}
+
+// app/javascript/mastodon/features/home_timeline/components/explore_prompt.tsx
+// Hide the "this is your home base" banner.
+.dismissable-banner:has([href='/explore']) {
+  display: none;
+}
+
+// app/views/statuses/_simple_status.html.haml
+// Set width and height for the local-only indicator
+.status__action-bar-button.icon-button:has(.fw.fa-chain-broken) {
+  font-size: 18px;
+  width: 23.1429px;
+  height: 23.1429px;
+  line-height: 23.15px;
+}
+
+// app/javascript/mastodon/features/compose/components/poll_form.jsx
+// Add some custom styling for the "multiple choice" selection button
+.compose-form__poll-wrapper .is-multiple-toggle {
+  padding: 10px; // same as the poll options above it
+  display: inline-flex;
+  align-items: center;
+  gap: 10px; // same as the padding
+}

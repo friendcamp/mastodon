@@ -51,7 +51,7 @@
         min-width: 0;
       }
 
-      @media screen and (max-width: 690px) {
+      @media screen and (width <= 690px) {
         grid-template-columns: 1fr 2fr 1fr;
 
         .column-0,
@@ -77,7 +77,7 @@
         }
       }
 
-      @media screen and (max-width: 600px) {
+      @media screen and (width <= 600px) {
         .column-1 {
           display: block;
         }

@@ -1,6 +1,8 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
-RSpec.describe Api::V1::StatusesController, type: :controller do
+RSpec.describe Api::V1::StatusesController do
   render_views
 
   let(:user)  { Fabricate(:user) }
@@ -118,7 +120,7 @@ RSpec.describe Api::V1::StatusesController, type: :controller do
     describe 'POST #create' do
       let(:scopes) { 'write:statuses' }
 
-      context do
+      context 'with a basic status body' do
         before do
           post :create, params: { status: 'Hello world' }
         end
@@ -130,6 +132,23 @@ RSpec.describe Api::V1::StatusesController, type: :controller do
         it 'returns rate limit headers' do
           expect(response.headers['X-RateLimit-Limit']).to eq RateLimiter::FAMILIES[:statuses][:limit].to_s
           expect(response.headers['X-RateLimit-Remaining']).to eq (RateLimiter::FAMILIES[:statuses][:limit] - 1).to_s
+        end
+      end
+
+      context 'with a safeguard' do
+        let!(:alice) { Fabricate(:account, username: 'alice') }
+        let!(:bob)   { Fabricate(:account, username: 'bob') }
+
+        before do
+          post :create, params: { status: '@alice hm, @bob is really annoying lately', allowed_mentions: [alice.id] }
+        end
+
+        it 'returns http unprocessable entity' do
+          expect(response).to have_http_status(422)
+        end
+
+        it 'returns serialized extra accounts in body' do
+          expect(body_as_json[:unexpected_accounts].map { |a| a.slice(:id, :acct) }).to eq [{ id: bob.id.to_s, acct: bob.acct }]
         end
       end
 
@@ -163,6 +182,46 @@ RSpec.describe Api::V1::StatusesController, type: :controller do
           expect(response.headers['X-RateLimit-Remaining']).to eq '0'
         end
       end
+
+      context 'with missing thread' do
+        subject { post :create, params: params }
+
+        let(:params) { { status: 'Hello world', in_reply_to_id: 0 } }
+
+        it 'returns http not found' do
+          subject
+
+          expect(response).to have_http_status(404)
+        end
+      end
+
+      context 'when scheduling a status' do
+        subject { post :create, params: params }
+
+        let(:params) { { status: 'Hello world', scheduled_at: 10.minutes.from_now } }
+        let(:account) { user.account }
+
+        it 'returns HTTP 200' do
+          subject
+
+          expect(response).to have_http_status(200)
+        end
+
+        it 'creates a scheduled status' do
+          expect { subject }.to change { account.scheduled_statuses.count }.from(0).to(1)
+        end
+
+        context 'when the scheduling time is less than 5 minutes' do
+          let(:params) { { status: 'Hello world', scheduled_at: 4.minutes.from_now } }
+
+          it 'does not create a scheduled status', :aggregate_failures do
+            subject
+
+            expect(response).to have_http_status(422)
+            expect(account.scheduled_statuses).to be_empty
+          end
+        end
+      end
     end
 
     describe 'DELETE #destroy' do
@@ -178,7 +237,7 @@ RSpec.describe Api::V1::StatusesController, type: :controller do
       end
 
       it 'removes the status' do
-        expect(Status.find_by(id: status.id)).to be nil
+        expect(Status.find_by(id: status.id)).to be_nil
       end
     end
 
@@ -202,7 +261,7 @@ RSpec.describe Api::V1::StatusesController, type: :controller do
 
   context 'without an oauth token' do
     before do
-      allow(controller).to receive(:doorkeeper_token) { nil }
+      allow(controller).to receive(:doorkeeper_token).and_return(nil)
     end
 
     context 'with a private status' do

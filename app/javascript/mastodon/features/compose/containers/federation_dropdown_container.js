@@ -1,12 +1,12 @@
 import { connect } from 'react-redux';
-import FederationDropdown from '../components/federation_dropdown';
+
 import { changeComposeFederation } from '../../../actions/compose';
 import { openModal, closeModal } from '../../../actions/modal';
 import { isUserTouching } from '../../../is_mobile';
+import FederationDropdown from '../components/federation_dropdown';
 
 const mapStateToProps = state => ({
-  isModalOpen: state.get('modal').modalType === 'ACTIONS',
-  value: (state.getIn(['compose', 'federation']) ? true : false),
+  value: state.getIn(['compose', 'federation']),
 });
 
 const mapDispatchToProps = dispatch => ({
@@ -16,9 +16,14 @@ const mapDispatchToProps = dispatch => ({
   },
 
   isUserTouching,
-  onModalOpen: props => dispatch(openModal('ACTIONS', props)),
-  onModalClose: () => dispatch(closeModal()),
-
+  onModalOpen: props => dispatch(openModal({
+    modalType: 'ACTIONS',
+    modalProps: props,
+  })),
+  onModalClose: () => dispatch(closeModal({
+    modalType: undefined,
+    ignoreFocus: false,
+  })),
 });
 
 export default connect(mapStateToProps, mapDispatchToProps)(FederationDropdown);

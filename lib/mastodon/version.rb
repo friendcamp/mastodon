@@ -9,19 +9,27 @@ module Mastodon
     end
 
     def minor
-      0
+      2
     end
 
     def patch
-      15
+      9
     end
 
-    def flags
+    def default_prerelease
       ''
     end
 
-    def suffix
-      '+hometown-1.1.1'
+    def prerelease
+      ENV['MASTODON_VERSION_PRERELEASE'].presence || default_prerelease
+    end
+
+    def build_metadata
+      ENV.fetch('MASTODON_VERSION_METADATA', nil)
+    end
+
+    def hometown_version
+      'hometown-1.1.1'
     end
 
     def to_a
@@ -29,7 +37,15 @@ module Mastodon
     end
 
     def to_s
-      [to_a.join('.'), flags, suffix].join
+      components = [to_a.join('.')]
+      components << "-#{prerelease}" if prerelease.present?
+      components << "+#{build_metadata}" if build_metadata.present?
+      components << "+#{hometown_version}"
+      components.join
+    end
+
+    def gem_version
+      @gem_version ||= Gem::Version.new(to_s.split('+')[0])
     end
 
     def repository
