@@ -1218,6 +1218,10 @@ button.icon-button.disabled i.fa-retweet {
     box-sizing: border-box;
     height: 48px;
   }
+
+  .admin-wrapper .sidebar .logo {
+    display: none;
+  }
 }
 
 .rules-list {

@@ -25,6 +25,9 @@ $ui-base-lighter-color: $cream;
 $ui-primary-color: #9bcbed;
 $ui-secondary-color: $classic-base-color !default;
 $ui-highlight-color: $blueberry;
+$ui-button-secondary-color: $bilberry;
+$ui-button-secondary-border-color: $bilberry;
+$ui-button-secondary-focus-background-color: $pink;
 
 $primary-text-color: $black !default;
 $darker-text-color: $classic-base-color !default;
@@ -34,6 +37,8 @@ $action-button-color: #606984;
 $inverted-text-color: $black !default;
 $lighter-text-color: $classic-base-color !default;
 $light-text-color: #444b5d;
+
+$ui-button-secondary-focus-color: $light-text-color;
 
 // Newly added colors
 $account-background-color: $white !default;

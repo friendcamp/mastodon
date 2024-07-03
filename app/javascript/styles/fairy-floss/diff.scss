@@ -512,6 +512,17 @@ a.mention,
   background: $purpleborder;
 }
 
+.admin-wrapper .sidebar__toggle__logo a {
+  color: $lighter-text-color !important;
+}
+
+// Mobile layout
+@media screen and (max-width: $no-gap-breakpoint - 285px - 1px) {
+  .admin-wrapper .sidebar .logo {
+    display: none;
+  }
+}
+
 .admin-wrapper .content .muted-hint a {
   color: $mint;
 }
@@ -652,4 +663,9 @@ a.mention,
     background-color: lighten($ui-highlight-color, 10%);
     color: $lighter-text-color;
   }
+}
+
+.dropdown-menu__container__header {
+  color: $lighter-text-color;
+  font-weight: 900;
 }

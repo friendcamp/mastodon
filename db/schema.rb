@@ -116,7 +116,7 @@ ActiveRecord::Schema[7.0].define(version: 2023_11_23_195926) do
     t.integer "min_reblogs"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.boolean "keep_local", default: false
+    t.boolean "keep_local", default: true, null: false
     t.index ["account_id"], name: "index_account_statuses_cleanup_policies_on_account_id"
   end
 
@@ -978,10 +978,10 @@ ActiveRecord::Schema[7.0].define(version: 2023_11_23_195926) do
     t.bigint "account_id", null: false
     t.bigint "application_id"
     t.bigint "in_reply_to_account_id"
+    t.datetime "deleted_at", precision: nil
     t.boolean "local_only"
     t.bigint "poll_id"
     t.string "activity_pub_type"
-    t.datetime "deleted_at", precision: nil
     t.datetime "edited_at", precision: nil
     t.boolean "trendable"
     t.bigint "ordered_media_attachment_ids", array: true
