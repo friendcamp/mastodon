@@ -65,7 +65,7 @@ class Sanitize
     end
 
     MASTODON_STRICT ||= freeze_config(
-      elements: %w(p br span a abbr del pre blockquote code b strong i em h1 h2 h3 h4 h5 ul ol li img u),
+      elements: %w(p br span a del pre blockquote code b strong u i em ul ol li abbr h1 h2 h3 h4 h5 img),
 
       attributes: {
         'abbr' => %w(title),
@@ -94,19 +94,17 @@ class Sanitize
       ]
     )
 
-    MASTODON_OEMBED ||= freeze_config(
-      elements: %w(audio embed iframe source video),
+    MASTODON_OEMBED = freeze_config(
+      elements: %w(audio iframe source video),
 
       attributes: {
         'audio' => %w(controls),
-        'embed' => %w(height src type width),
         'iframe' => %w(allowfullscreen frameborder height scrolling src width),
         'source' => %w(src type),
         'video' => %w(controls height loop width),
       },
 
       protocols: {
-        'embed' => { 'src' => HTTP_PROTOCOLS },
         'iframe' => { 'src' => HTTP_PROTOCOLS },
         'source' => { 'src' => HTTP_PROTOCOLS },
       },
